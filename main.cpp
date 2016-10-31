@@ -14,14 +14,16 @@
 #include "main.h"
 #include "region.h"
 #include "rtmp/rtmp.h"
-#include "json/json.h"
+#include "json.h"
 #include "vda.h"
+#include "ClientSock.hpp"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <signal.h>
+#include <errno.h>
 
 #include <netdb.h>
 #include <sys/socket.h>
@@ -111,7 +113,7 @@ static pthread_t threadAuthenServer;
 #define AUTHEN_SERVER_PORT      10000
 
 //RTMP
-static HI_BOOL send_to_test_server = HI_FALSE;
+static HI_BOOL send_RTMP_to_server = HI_FALSE;
 static HI_BOOL reInitRTMP = HI_TRUE;
 #ifdef ALWAYS_SEND_RTMP
 int has_server_key = 1;
@@ -119,7 +121,7 @@ int has_server_key = 1;
 int has_server_key = 0;
 #endif
 
-static pthread_t threadAuthenServerserver;
+static pthread_t threadAuthenServerdetect;
 static bool detect_is_start;
 
 //detect motion
@@ -129,6 +131,9 @@ static DETECT_SENDING_STEP detect_sending_server = DETECT_IDLE;
 static unsigned char detect_time_left = 60;
 static pthread_t thread_detect_check_time_left;
 #define VDA_MOTION_DETECT_THREADHOLD	4000
+
+//HC
+static pthread_t thread_read_HC_data;
 
 //cam info
 static char user[MAX_USER_PASS_LEN];
@@ -336,13 +341,9 @@ void SAMPLE_VENC_Usage(char *sPrgNm)
     printf("\t 4: wifi failed.\n");
     printf("\t 5: sync time.\n");
 
-    printf("\t S: stream RTMP server SCTV.\n");
-    printf("\t Q: stream RTMP server QuangAnh.\n");
-    printf("\t L: stream RTMP server Lumi.\n");
-    printf("\t F: stream RTMP server Lumi forward port.\n");
-    printf("\t M: stream RTMP server May ao.\n");
-
-    printf("\t a: test audio client.\n");
+    printf("\t S: stream RTMP to server.\n");
+    printf("\t 7: get cam id.\n");
+    printf("\t H: test connect HC.\n");
 
     return;
 }
@@ -2348,7 +2349,7 @@ HI_S32 VENC_Sent(char *buffer, int buflen, int channel)
 	}
 
 //send to server_test
-	if ((send_to_test_server) && (channel == 0) && (reInitRTMP == HI_FALSE)) {
+	if ((send_RTMP_to_server) && (channel == 0) && (reInitRTMP == HI_FALSE)) {
 		//send frame to rtmp server
 		u_int32_t dts, pts;
 
@@ -2382,7 +2383,7 @@ HI_S32 SAMPLE_COMM_VENC_Sentjin(VENC_STREAM_S *pstStream, int channel)
 		}
     }
 
-    if ((send_to_test_server) && (channel == 0)) flag = 1;
+    if ((send_RTMP_to_server) && (channel == 0)) flag = 1;
 
     if(flag)
     {
@@ -2715,7 +2716,7 @@ HI_S32 AENC_Sent(AUDIO_STREAM_S stream) {
 	}
 
 //send to server_test
-	if (send_to_test_server && (reInitRTMP == HI_FALSE)) {
+	if (send_RTMP_to_server && (reInitRTMP == HI_FALSE)) {
 		//send frame to rtmp server
 		u_int32_t pts;
 
@@ -2896,7 +2897,6 @@ HI_S32 destroy_audio_client() {
 
 
 static char authen_key[200];
-int client;
 void *thread_init_RTMP(void *parg) {
 	HI_S32 s32Ret;
 
@@ -3203,7 +3203,7 @@ void * detect_check_time_left_func(void *param) {
 		if (detect_time_left == 0) {
 			//notify server stop stream
 			detect_is_start = FALSE;
-			pthread_create(&threadAuthenServerserver, 0, connect_server_authen_send_detect_command, (void*)&detect_is_start);
+			pthread_create(&threadAuthenServerdetect, 0, connect_server_authen_send_detect_command, (void*)&detect_is_start);
 
 			has_server_key = 0;
 			reInitRTMP = HI_TRUE;
@@ -3371,11 +3371,14 @@ void * connect_server_authen_send_detect_command(void* pParam) {
 	timeout.tv_sec = 3;
 	timeout.tv_usec = 0;
 	ret = connect(id, (struct sockaddr *) &serveraddr, sizeof(serveraddr));
-	if (ret >= 0) {
-		printf("Connect Server: Error Connect Socket\n");
-//		return NULL;
-		goto ERR_CONNECT_FAIL;
-	}
+    if (ret == SOCKET_ERROR) {
+        if (errno != EINPROGRESS) {
+            close(id);
+//            return NULL;
+            goto ERR_CONNECT_FAIL;
+        }
+    }
+
 	ret = select(id+1, NULL, &wfds, NULL, &timeout);
 	if (ret < 0) {
 		printf("Connect Server: Error Select\n");
@@ -3473,7 +3476,7 @@ int check_motion_main(VDA_DATA_S *pstVdaData) {
 			if (detect_sending_server == DETECT_IDLE) {
 				fprintf(fp, "===== %s ===== connect server  - total = %d\n", __FUNCTION__, total);
 				//connect server authen and send detect command
-				pthread_create(&threadAuthenServerserver, 0, connect_server_authen_send_detect_command, (void*)&detect_is_start);
+				pthread_create(&threadAuthenServerdetect, 0, connect_server_authen_send_detect_command, (void*)&detect_is_start);
 				detect_sending_server = DETECT_SEND_REQUEST;
 			}
     	}
@@ -3654,7 +3657,6 @@ int check_isp_register() {
 #endif //CHECK_ISP_REGISTER
 	return 0;
 }
-
 
 HI_S32 create_stream(HI_VOID)
 {
@@ -4091,123 +4093,6 @@ END_VENC_720P_CLASSIC_0:	//system exit
     return s32Ret;
 }
 
-
-HI_S32 test_audio_client() {
-    HI_S32 s32Ret = HI_SUCCESS;
-    VB_CONF_S stVbConf;
-//    FILE        *pfd = NULL;
-    AIO_ATTR_S stAioAttr;
-
-    AUDIO_DEV   AoDev = 0;
-    AO_CHN      AoChn = 0;
-    ADEC_CHN    AdChn = 0;
-
-    /* init stAio. all of cases will use it */
-//    stAioAttr.enSamplerate = AUDIO_SAMPLE_RATE_44100;
-    stAioAttr.enSamplerate = AUDIO_SAMPLE_RATE_22050;
-//    stAioAttr.enSamplerate = AUDIO_SAMPLE_RATE_16000;
-    stAioAttr.enBitwidth = AUDIO_BIT_WIDTH_16;
-    stAioAttr.enWorkmode = AIO_MODE_I2S_MASTER;
-    stAioAttr.enSoundmode = AUDIO_SOUND_MODE_MONO;
-    stAioAttr.u32EXFlag = 1;
-    stAioAttr.u32FrmNum = 30;
-    stAioAttr.u32PtNumPerFrm = AUDIO_CLIENT_PTNUMPERFRM;
-    stAioAttr.u32ChnCnt = 2;
-    stAioAttr.u32ClkSel = 1;
-
-    memset(&stVbConf, 0, sizeof(VB_CONF_S));
-    s32Ret = SAMPLE_COMM_SYS_Init(&stVbConf);
-    if (HI_SUCCESS != s32Ret)
-    {
-        printf("%s: system init failed with %d!\n", __FUNCTION__, s32Ret);
-        return HI_FAILURE;
-    }
-
-    s32Ret = SAMPLE_COMM_AUDIO_CfgAcodec(&stAioAttr, gs_bMicIn);
-    if (HI_SUCCESS != s32Ret)
-    {
-        SAMPLE_DBG(s32Ret);
-        return HI_FAILURE;
-    }
-
-    s32Ret = SAMPLE_COMM_AUDIO_StartAdec(AdChn, gs_AudioClientPayloadType);
-    if (s32Ret != HI_SUCCESS)
-    {
-        SAMPLE_DBG(s32Ret);
-        return HI_FAILURE;
-    }
-
-    s32Ret = SAMPLE_COMM_AUDIO_StartAo(AoDev, AoChn, &stAioAttr, gs_pstAoReSmpAttr);
-    if (s32Ret != HI_SUCCESS)
-    {
-        SAMPLE_DBG(s32Ret);
-        return HI_FAILURE;
-    }
-
-    s32Ret = SAMPLE_COMM_AUDIO_AoBindAdec(AoDev, AoChn, AdChn);
-    if (s32Ret != HI_SUCCESS)
-    {
-        SAMPLE_DBG(s32Ret);
-        return HI_FAILURE;
-    }
-
-    //Output 1 at GPIO 4 - 1
-    HI_U32 value, addr = 0x201803FC;
-    HI_S32 rc;
-
-    rc = HI_MPI_SYS_GetReg(addr, &value);
-    if (rc) {
-    	printf("%s: HI_MPI_SYS_GetReg failed 0x%x\n", __FUNCTION__, addr);
-    }
-    value |= 0x00000002;
-    rc = HI_MPI_SYS_SetReg(addr, value);
-    if (rc) {
-    	printf("%s: HI_MPI_SYS_SetReg failed 0x%x\n", __FUNCTION__, addr);
-    }
-
-	//creat audio server to receive audio data
-	pthread_create(&threadReceiveAudioData, 0, AudioServerListen, (void*)&AdChn);
-
-	//exit
-    printf("please press twice ENTER to exit this sample\n");
-    getchar();
-    getchar();
-    printf("exit Audio client test\n");
-
-    //Output 0 at GPIO 4 - 1
-    rc = HI_MPI_SYS_GetReg(addr, &value);
-    if (rc) {
-    	printf("%s: HI_MPI_SYS_GetReg failed 0x%x\n", __FUNCTION__, addr);
-    }
-    value &= 0xFFFFFFFD;
-    rc = HI_MPI_SYS_SetReg(addr, value);
-    if (rc) {
-    	printf("%s: HI_MPI_SYS_SetReg failed 0x%x\n", __FUNCTION__, addr);
-    }
-
-    SAMPLE_COMM_AUDIO_StopAo(AoDev, AoChn, gs_bAioReSample);
-    SAMPLE_COMM_AUDIO_StopAdec(AdChn);
-    SAMPLE_COMM_AUDIO_AoUnbindAdec(AoDev, AoChn, AdChn);
-
-	return HI_SUCCESS;
-}
-
-
-
-HI_S32 test_key_server() {
-	//creat audio server to receive audio data
-	pthread_create(&threadAuthenServer, 0, AuthenServerListen, NULL);
-
-	//exit
-    printf("please press twice ENTER to exit this sample\n");
-    getchar();
-    getchar();
-    printf("exit Authen client test\n");
-
-	return HI_SUCCESS;
-}
-
-
 void InitRtspServer()
 {
 //	int i;
@@ -4225,12 +4110,9 @@ void InitRtspServer()
 	pthread_create(&threadAuthenServer, 0, AuthenServerListen, NULL);
 #endif //USE_AUTHEN_REQUEST_STREAM
 
-	//connect to authen server and send detect command
-//	pthread_create(&threadAuthenServerserver, 0, connect_server_authen_send_detect_command, NULL);
-
 #ifdef USE_RTMP
 	//init rtmp client
-	if (send_to_test_server) {
+	if (send_RTMP_to_server) {
 		pthread_create(&threadInitRTMP, 0, thread_init_RTMP, NULL);
 	}
 #endif //USE_RTMP
@@ -4242,7 +4124,7 @@ void InitRtspServer()
 	s32Ret = create_stream();
 
 #ifdef USE_RTMP
-	if (send_to_test_server) {
+	if (send_RTMP_to_server) {
 		rtmp_destroy_client();
 	}
 #endif //USE_RTMP
@@ -4254,7 +4136,6 @@ void InitRtspServer()
 	    printf("program exit abnormally!\n");
 	exitok++;
 }
-
 
 void * thread_sync_time(HI_VOID *p) {
 	time_t t;
@@ -4278,7 +4159,6 @@ void * thread_sync_time(HI_VOID *p) {
 	return NULL;
 }
 
-
 HI_S32 STREAM_720p(HI_VOID)
 {
 	pthread_create(&threadSyncTime, 0, thread_sync_time, NULL);
@@ -4287,7 +4167,6 @@ HI_S32 STREAM_720p(HI_VOID)
 
 	return HI_SUCCESS;
 }
-
 
 int get_cam_id() {
 	FILE* file = fopen("/home/mmap_tmpfs/mmap.info", "rb");
@@ -4347,6 +4226,68 @@ int get_camera_info() {
 }
 
 
+int process_HC_command(ClientSock_p pClientSocket, string data) {
+
+
+	return 0;
+}
+
+void * thread_read_HC_data_func(HI_VOID *p) {
+	ClientSock_p  pClientSocket = (ClientSock_p)p;
+	int len;
+	unsigned char *pBuffer = NULL;
+
+	while (HI_TRUE) {
+		len = pClientSocket->GetBuffer(&pBuffer);
+		printf("read HC data len = %d\n", len);
+		if (len > 0) {
+			std::string data = (char*)pBuffer;
+			printf("read HC data: %s\n", data.c_str());
+			process_HC_command(pClientSocket, data);
+		}
+		else {
+			printf("read HC data: null\n");
+			pClientSocket->Close();
+			break;
+		}
+	}
+
+	return NULL;
+}
+
+//static ClientSock_p pClientSocket       = NULL;
+#define HC_ADDRESS		"192.168.1.6"
+#define HC_PORT			1235
+int test_connect_HC() {
+	ClientSock_p pClientSocket = new ClientSock(HC_ADDRESS, HC_PORT);
+
+	if (!pClientSocket->Connect()) {
+		printf("connect HC failed\n");
+//		return -1;
+	}
+
+	pthread_create(&thread_read_HC_data, 0, thread_read_HC_data_func, pClientSocket);
+
+
+    printf("please press twice ENTER to exit this sample\n");
+    getchar();
+    getchar();
+
+    if (pClientSocket->IsConnected()) {
+		if (!pClientSocket->Close()) {
+			printf("disconnect HC failed\n");
+			return -1;
+		}
+    }
+	if (pClientSocket!= NULL) {
+		delete pClientSocket;
+		pClientSocket = NULL;
+	}
+
+	return 0;
+}
+
+
 /******************************************************************************
 * function    : main()
 * Description : main program
@@ -4386,43 +4327,14 @@ int main(int argc, char *argv[])
         	s32Ret = sync_time();
         	break;
         case 'S':
-        	send_to_test_server = HI_TRUE;
-        	client = 2;					//SCTV
+        	send_RTMP_to_server = HI_TRUE;
         	s32Ret = STREAM_720p();
-        	break;
-        case 'D':
-        	send_to_test_server = HI_TRUE;
-        	client = 1;					//anh Duc
-        	s32Ret = STREAM_720p();
-        	break;
-        case 'Q':
-        	send_to_test_server = HI_TRUE;
-        	client = 3;					//QuangAnh
-        	s32Ret = STREAM_720p();
-        	break;
-        case 'L':
-        	send_to_test_server = HI_TRUE;
-        	client = 0;					//Lumi
-        	s32Ret = STREAM_720p();
-        	break;
-        case 'F':
-        	send_to_test_server = HI_TRUE;
-        	client = 5;					//Lumi forward port
-        	s32Ret = STREAM_720p();
-        	break;
-        case 'M':
-        	send_to_test_server = HI_TRUE;
-        	client = 4;					//May ao
-        	s32Ret = STREAM_720p();
-        	break;
-        case 'a':
-        	s32Ret = test_audio_client();
-        	break;
-        case 'k':
-        	s32Ret = test_key_server();
         	break;
         case '7':
         	s32Ret = get_cam_id();
+        	break;
+        case 'H':
+        	s32Ret = test_connect_HC();
         	break;
         default:
             printf("the index is invaild!\n");

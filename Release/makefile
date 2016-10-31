@@ -8,12 +8,13 @@ RM := rm -rf
 
 # All of the sources participating in the build are defined here
 -include sources.mk
+-include socket/subdir.mk
 -include rtmp/subdir.mk
 -include libjpeg/subdir.mk
--include json/subdir.mk
 -include highgui/subdir.mk
 -include core/subdir.mk
 -include common/subdir.mk
+-include Libraries/subdir.mk
 -include subdir.mk
 -include objects.mk
 

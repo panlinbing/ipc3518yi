@@ -55,7 +55,11 @@ main.o main.o: ../main.cpp ../main.h ../region.h \
  /home/hoang/camera_ip/mpp/include/hi_comm_isp.h \
  /home/hoang/camera_ip/mpp/include/hi_comm_sns.h \
  /home/hoang/camera_ip/mpp/include/hi_sns_ctrl.h ../rtmp/rtmp.h \
- ../rtmp/srs_librtmp.h ../json/json.h ../vda.h \
+ ../rtmp/srs_librtmp.h \
+ /home/hoang/workspaceCameraIP/wifi_login/include/json.h ../vda.h \
+ /home/hoang/workspaceCameraIP/wifi_login/include/ClientSock.hpp \
+ /home/hoang/workspaceCameraIP/wifi_login/include/typedefs.h \
+ /home/hoang/workspaceCameraIP/wifi_login/include/Locker.hpp \
  /home/hoang/QRcode/zbar/zbar-0.10/build/include/zbar.h \
  /home/hoang/QRcode/zbar/zbar-0.10/build/include/zbar/Exception.h \
  /home/hoang/QRcode/zbar/zbar-0.10/build/include/zbar/Decoder.h \
@@ -199,9 +203,15 @@ main.o main.o: ../main.cpp ../main.h ../region.h \
 
 ../rtmp/srs_librtmp.h:
 
-../json/json.h:
+/home/hoang/workspaceCameraIP/wifi_login/include/json.h:
 
 ../vda.h:
+
+/home/hoang/workspaceCameraIP/wifi_login/include/ClientSock.hpp:
+
+/home/hoang/workspaceCameraIP/wifi_login/include/typedefs.h:
+
+/home/hoang/workspaceCameraIP/wifi_login/include/Locker.hpp:
 
 /home/hoang/QRcode/zbar/zbar-0.10/build/include/zbar.h:
 
