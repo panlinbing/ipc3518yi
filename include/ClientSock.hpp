@@ -52,6 +52,7 @@ public:
 //    bool_t SetBlocking();
 
     int_t GetBuffer(u8_p *pBuffer);
+    void ResetBuffer();
 
     void_t PushData(u8_t byData);
     void_t PushBuffer(u8_p pByBuffer, u32_t dwLength);

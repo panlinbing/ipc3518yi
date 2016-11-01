@@ -17,6 +17,7 @@
 #include "json.h"
 #include "vda.h"
 #include "ClientSock.hpp"
+#include "Sclient.hpp"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -4226,24 +4227,53 @@ int get_camera_info() {
 }
 
 
-int process_HC_command(ClientSock_p pClientSocket, string data) {
-
+//static ClientSock_p pClientSocket       = NULL;
+#define HC_ADDRESS		"192.168.1.6"
+#define HC_PORT			1235
+static ClientSock_p	pClientSocket	= NULL;
+static SClient_p	pSClient		= NULL;
+int process_HC_command(JsonCommand_p pJsoncommand) {
+	switch (pSClient->getState()) {
+		case SClient::IDLE:
+			break;
+		case SClient::WAIT_AUTHEN:
+			break;
+		default:
+			break;
+	}
 
 	return 0;
 }
 
+int process_HC_Json_command(string data) {
+	pSClient->addData(data);
+
+	while (pSClient->isCommandValid()) {
+		printf("find Json command: remain data :\'%s\'\n", pSClient->getRemainData().c_str());
+		JsonCommand_p pJsoncommand = pSClient->getJsonCommand();
+		if (pJsoncommand != NULL) {
+			printf("command class: \'%s\'\n", pJsoncommand->GetCmdClass().c_str());
+			printf("command: \'%s\'\n", pJsoncommand->GetCommand().c_str());
+			printf("Json value: \'%s\'\n", pJsoncommand->GetJsonValue().c_str());
+			process_HC_command(pJsoncommand);
+			delete pJsoncommand;
+			pJsoncommand = NULL;
+		}
+	}
+	return 0;
+}
+
 void * thread_read_HC_data_func(HI_VOID *p) {
-	ClientSock_p  pClientSocket = (ClientSock_p)p;
 	int len;
 	unsigned char *pBuffer = NULL;
 
-	while (HI_TRUE) {
+	while (TRUE) {
 		len = pClientSocket->GetBuffer(&pBuffer);
-		printf("read HC data len = %d\n", len);
 		if (len > 0) {
 			std::string data = (char*)pBuffer;
-			printf("read HC data: %s\n", data.c_str());
-			process_HC_command(pClientSocket, data);
+			printf("read HC data: %s - %d\n", data.c_str(), len);
+			process_HC_Json_command(data);
+			pClientSocket->ResetBuffer();
 		}
 		else {
 			printf("read HC data: null\n");
@@ -4251,22 +4281,19 @@ void * thread_read_HC_data_func(HI_VOID *p) {
 			break;
 		}
 	}
-
 	return NULL;
 }
 
-//static ClientSock_p pClientSocket       = NULL;
-#define HC_ADDRESS		"192.168.1.6"
-#define HC_PORT			1235
 int test_connect_HC() {
-	ClientSock_p pClientSocket = new ClientSock(HC_ADDRESS, HC_PORT);
+	pClientSocket = new ClientSock(HC_ADDRESS, HC_PORT);
+	pSClient = new SClient(pClientSocket);
 
 	if (!pClientSocket->Connect()) {
 		printf("connect HC failed\n");
 //		return -1;
 	}
 
-	pthread_create(&thread_read_HC_data, 0, thread_read_HC_data_func, pClientSocket);
+	pthread_create(&thread_read_HC_data, 0, thread_read_HC_data_func, NULL);
 
 
     printf("please press twice ENTER to exit this sample\n");
@@ -4283,7 +4310,10 @@ int test_connect_HC() {
 		delete pClientSocket;
 		pClientSocket = NULL;
 	}
-
+	if (pSClient != NULL) {
+		delete pSClient;
+		pSClient = NULL;
+	}
 	return 0;
 }
 

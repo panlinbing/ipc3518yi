@@ -326,14 +326,19 @@ ClientSock::IsReadable(
 int_t
 ClientSock::GetBuffer(u8_p *pBuffer) {
 	int_t iLength = 0;
-//    if (IsConnected() && IsReadable(100)) {
+    if (IsConnected()) {
         //DEBUG1("recv Data");
         iLength = recv(m_idwSockfd, m_pByBuffer, BUFFER_SOCKET_SIZE, 0);
         *pBuffer = m_pByBuffer;
         //DEBUG2("len: %d", iLength);
 //        memset(m_pByBuffer, '\0', BUFFER_SOCKET_SIZE);
-//    }
+    }
     return iLength;
+}
+
+void
+ClientSock::ResetBuffer() {
+	memset(m_pByBuffer, '\0', BUFFER_SOCKET_SIZE);
 }
 
 /**
