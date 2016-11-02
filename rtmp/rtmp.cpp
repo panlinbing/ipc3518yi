@@ -14,7 +14,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
-#include <string>
+//#include <string>
 #include "rtmp.h"
 
 using namespace std;
@@ -23,57 +23,9 @@ static srs_rtmp_t rtmp;
 static bool rtmp_ready = 0;
 pthread_mutex_t lock;
 
-char server[50];
-//int rtmp_init_client(int client)
-int rtmp_init_client(char* client)
+int rtmp_create_stream(std::string url)
 {
-//	if (client == 0) {
-//		rtmp = srs_rtmp_create(RTMP_SERVER_URL_LUMI);
-//		sprintf(server, RTMP_SERVER_URL_LUMI);
-//	} else if (client == 1) {
-//		rtmp = srs_rtmp_create(RTMP_SERVER_URL_A_DUC);
-//		sprintf(server, RTMP_SERVER_URL_A_DUC);
-//	} else if (client == 2) {
-//		rtmp = srs_rtmp_create(RTMP_SERVER_URL_SCTV);
-//		sprintf(server, RTMP_SERVER_URL_SCTV);
-//	} else if (client == 3) {
-//		rtmp = srs_rtmp_create(RTMP_SERVER_URL_QUANGANH);
-//		sprintf(server, RTMP_SERVER_URL_QUANGANH);
-//	} else if (client == 4) {
-//		rtmp = srs_rtmp_create(RTMP_SERVER_URL_MAYAO);
-//		sprintf(server, RTMP_SERVER_URL_MAYAO);
-//	} else if (client == 5) {
-//		rtmp = srs_rtmp_create(RTMP_SERVER_URL_LUMI_FORWARD);
-//		sprintf(server, RTMP_SERVER_URL_LUMI_FORWARD);
-//	}
-
-	string key = client;
-//	string url = "rtmp://192.168.20.3:1935/live?doPublish=" + key + "/stream";
-//	string url = "rtmp://112.197.2.156:1935/live?doPublish=" + key + "/stream";
-//	string url = "rtmp://192.168.0.125:1935/live?doPublish=" + key + "/stream";
-//	string url = "rtmp://192.168.100.12:1935/livestream?doPublish=" + key + "/B0D59D246169";
-//	string url = "rtmp://112.197.2.156:1935/live/tokenTest123456789";
-
-//SCTV
-//	string url = "rtmp://112.197.10.222:1935/lumi_test/tokenTest123456789";
-	string url = "rtmp://112.197.10.222:1935/lumi_test/" + key;
-//Lumi
-//	string url = "rtmp://192.168.100.12:1935/live/tokenTest123456789";
-//	string url = "rtmp://192.168.1.107:1935/live/" + key;
-//May ao
-//	string url = "rtmp://192.168.1.10:1935/live/stream";
-//Forward port
-//	string url = "rtmp://123.16.43.20:1935/live/tokenTest123456789";
-//A Duc
-//	string url = RTMP_SERVER_URL_A_DUC;
-
-//VIETTEL
-//	string url = "rtmp://192.168.10.114:1935/live/stream";
-
-
-//	rtmp = srs_rtmp_create(client);
 	rtmp = srs_rtmp_create(url.c_str());
-	sprintf(server, client);
 
     if (rtmp == NULL) {
     	srs_human_trace("srs_rtmp_create failed.");
@@ -110,6 +62,33 @@ int rtmp_init_client(char* client)
 
     rtmp_ready = 1;
 	return 0;
+}
+
+int rtmp_init_client(char* client) {
+	string key = client;
+
+//SCTV
+//	string url = "rtmp://112.197.10.222:1935/lumi_test/tokenTest123456789";
+	string url = "rtmp://112.197.10.222:1935/lumi_test/" + key;
+//Lumi
+//	string url = "rtmp://192.168.100.12:1935/live/tokenTest123456789";
+//	string url = "rtmp://192.168.1.107:1935/live/" + key;
+//May ao
+//	string url = "rtmp://192.168.1.10:1935/live/stream";
+//Forward port
+//	string url = "rtmp://123.16.43.20:1935/live/tokenTest123456789";
+//A Duc
+//	string url = RTMP_SERVER_URL_A_DUC;
+
+//VIETTEL
+//	string url = "rtmp://192.168.10.114:1935/live/stream";
+
+	return rtmp_create_stream(url);
+}
+
+int rtmp_init_client_full(std::string ip, std::string port, std::string application, std::string stream) {
+	std::string url = "rtmp://" + ip + ":" + port + "/" + application + "/" + stream;
+	return rtmp_create_stream(url);
 }
 
 int rtmp_send_h264_raw_stream(char* data, int size, u_int32_t dts, u_int32_t pts) {

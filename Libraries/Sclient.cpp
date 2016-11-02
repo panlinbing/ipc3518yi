@@ -5,25 +5,31 @@
  *      Author: hoang
  */
 
+#include <stdio.h>
 #include "Sclient.hpp"
 
 
-SClient::SClient(ClientSock_p pClientSock) {
+SClient::SClient(ClientSock_p pClientSock, enum DeviceClass deviceClass) {
 	mRemainData = "";
 	mCommandValid = FALSE;
 	mState = IDLE;
 	m_pClientSock = pClientSock;
+	mDeviceClass = deviceClass;
 }
 
-SClient::SClient(ClientSock_p pClientSock, std::string data) {
+SClient::SClient(ClientSock_p pClientSock, std::string data, enum DeviceClass deviceClass) {
 	mRemainData = data;
 	mCommandValid = TRUE;
 	mState = IDLE;
 	m_pClientSock = pClientSock;
+	mDeviceClass = deviceClass;
 }
 
 SClient::~SClient() {
-
+    if (m_pClientSock != NULL) {
+        delete m_pClientSock;
+        m_pClientSock = NULL;
+    }
 }
 
 std::string
@@ -76,13 +82,15 @@ JsonCommand_p SClient::getJsonCommand() {
 }
 
 int
-SClient::sendJsonCommand(JsonCommand_p pJsoncommand) {
-	std::string strOutput = STA + pJsoncommand->GetCmdClass() +
-			DE2 + pJsoncommand->GetCommand() +
-			pJsoncommand->GetJsonValue() + END;
+SClient::sendJsonCommand(JsonCommand_p pJsonCommand) {
+	std::string strOutput = STA + pJsonCommand->GetCmdClass() +
+			DE2 + pJsonCommand->GetCommand() +
+			pJsonCommand->GetJsonValue() + END;
 
 	strOutput.erase(std::remove(strOutput.begin(), strOutput.end(), ENDLN), strOutput.end());
 	strOutput.erase(std::remove(strOutput.begin(), strOutput.end(), SPACE), strOutput.end());
+
+	printf("========== %s - %s\n", __FUNCTION__, strOutput.c_str());
 
 	u32_t dwLength = strOutput.length();
 	u8_p pByBuffer = (u8_p)malloc(strOutput.size() + 1);
@@ -91,9 +99,9 @@ SClient::sendJsonCommand(JsonCommand_p pJsoncommand) {
 	m_pClientSock->PushBuffer(pByBuffer, dwLength);
 
 	free(pByBuffer);
-    if (pJsoncommand != NULL) {
-        delete pJsoncommand;
-        pJsoncommand = NULL;
+    if (pJsonCommand != NULL) {
+        delete pJsonCommand;
+        pJsonCommand = NULL;
     }
 	return 0;
 }
@@ -108,4 +116,44 @@ SClient::setState(enum SClient::State state) {
 	mState = state;
 }
 
+bool
+SClient::Connect() {
+//    if (m_pClientSock != NULL) {
+        return m_pClientSock->Connect();
+//    }
+//    return FALSE;
+}
+
+bool
+SClient::Close() {
+    if (m_pClientSock != NULL) {
+        return m_pClientSock->Close();
+    }
+    return FALSE;
+}
+
+bool
+SClient::SendAuthenComand(std::string camType, std::string camid, std::string camname, std::string port) {
+    Json::Value root;
+    root["type"] = camType;
+    root["camid"] = camid;
+    root["name"] = camname;
+    root["port"] = port;
+    JsonCommand_p pJsonCommand = new JsonCommand();
+    pJsonCommand->SetCmdClass("auth");
+    pJsonCommand->SetCommand("req");
+    pJsonCommand->SetJsonObject(root);
+
+    sendJsonCommand(pJsonCommand);
+    mState = WAIT_AUTHEN;
+	return TRUE;
+}
+
+bool
+SClient::SendKeepAliveCommand() {
+	JsonCommand_p pJsonCommand = new JsonCommand(CMD_CLASS_KALIVE, CMD_REQ, "{}");
+	sendJsonCommand(pJsonCommand);
+
+	return TRUE;
+}
 

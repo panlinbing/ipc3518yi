@@ -35,6 +35,7 @@
 #include <sys/msg.h>
 #include <netinet/if_ether.h>
 #include <net/if.h>
+#include <ifaddrs.h>
 
 //#include <linux/if_ether.h>
 //#include <linux/sockios.h>
@@ -1221,7 +1222,7 @@ static char* GetLocalIP(int sock)
 	struct ifreq ifreq;
 	struct sockaddr_in *sin;
 	char * LocalIP = (char*)malloc(20);
-	strcpy(ifreq.ifr_name,"eth0");
+	strcpy(ifreq.ifr_name,"ra0");
 	if (!(ioctl (sock, SIOCGIFADDR,&ifreq)))
     	{
 		sin = (struct sockaddr_in *)&ifreq.ifr_addr;
@@ -2924,12 +2925,6 @@ int process_command_start_stream(Json::Value root) {
 	std::string user_read = root["user"].asString();
 	std::string pass_read = root["pass"].asString();
 
-	printf("user_read - \"%s\" - %d\n", user_read.c_str(), user_read.length());
-	printf("pass_read - \"%s\" - %d\n", pass_read.c_str(), pass_read.length());
-	printf("token - \"%s\" - %d\n", token.c_str(), token.length());
-	printf("user - \"%s\" - %d\n", user, user_read.length());
-	printf("pass - \"%s\" - %d\n", pass, pass_read.length());
-
 	//check param
 	if ((token == "") || (user_read == "") || (pass_read == ""))
 		return -1;
@@ -2946,11 +2941,6 @@ int process_command_start_stream(Json::Value root) {
 int process_command_stop_stream(Json::Value root) {
 	std::string user_read = root["user"].asString();
 	std::string pass_read = root["pass"].asString();
-
-	printf("user_read - \"%s\" - %d\n", user_read.c_str(), user_read.length());
-	printf("pass_read - \"%s\" - %d\n", pass_read.c_str(), pass_read.length());
-	printf("user - \"%s\"\n", user);
-	printf("pass - \"%s\"\n", pass);
 
 	//check param
 	if ((user_read == "") || (pass_read == ""))
@@ -2970,11 +2960,6 @@ int process_command_stop_stream(Json::Value root) {
 int process_command_check_stream(Json::Value root) {
 	std::string user_read = root["user"].asString();
 	std::string pass_read = root["pass"].asString();
-
-	printf("user_read - \"%s\" - %d\n", user_read.c_str(), user_read.length());
-	printf("pass_read - \"%s\" - %d\n", pass_read.c_str(), pass_read.length());
-	printf("user - \"%s\"\n", user);
-	printf("pass - \"%s\"\n", pass);
 
 	//check param
 	if ((user_read == "") || (pass_read == ""))
@@ -4182,6 +4167,29 @@ int get_cam_id() {
 	return 0;
 }
 
+int get_cam_local_ip(char *data, std::string name) {
+	struct ifaddrs * ifAddrStruct=NULL;
+    struct ifaddrs * ifa=NULL;
+    void * tmpAddrPtr=NULL;
+
+    getifaddrs(&ifAddrStruct);
+
+    for (ifa = ifAddrStruct; ifa != NULL; ifa = ifa->ifa_next) {
+        if (!ifa->ifa_addr) {
+            continue;
+        }
+        if ((ifa->ifa_addr->sa_family == AF_INET) && (name.compare(ifa->ifa_name) == 0)) {
+            // is a valid IP4 Address and name is "name"
+            tmpAddrPtr=&((struct sockaddr_in *)ifa->ifa_addr)->sin_addr;
+            inet_ntop(AF_INET, tmpAddrPtr, data, INET_ADDRSTRLEN);
+            printf("%s IP Address %s\n", ifa->ifa_name, data);
+            break;
+        }
+    }
+    if (ifAddrStruct!=NULL) freeifaddrs(ifAddrStruct);
+    return 0;
+}
+
 int read_info(const char *filename, char *data, int len){
 	FILE *pfile;
 	int ret;
@@ -4194,6 +4202,21 @@ int read_info(const char *filename, char *data, int len){
 	if (data[ret - 1] == '\n')
 		data[ret - 1] = '\0';
 	printf("%s is: \"%s\" - %d\n", filename, data, ret);
+
+	fclose(pfile);
+	return 0;
+}
+
+int write_info(const char *filename, const char *data, int len) {
+	FILE *pfile;
+	int ret;
+
+	pfile = fopen(filename, "w");
+	if (!pfile)
+		return -1;
+
+	ret = fwrite(data, 1, len, pfile);
+	printf("%s set to: \"%s\" - %d\n", filename, data, ret);
 
 	fclose(pfile);
 	return 0;
@@ -4220,32 +4243,215 @@ int get_camera_info() {
 		//read camera info
 		ret = read_info(FILE_USER, user, MAX_USER_PASS_LEN);
 		ret = read_info(FILE_PASS, pass, MAX_USER_PASS_LEN);
-		ret = read_info(FILE_IP, camip, 20);
+//		ret = read_info(FILE_IP, camip, 20);
 		ret = read_info(FILE_PORT, port, 10);
 	}
+	ret = get_cam_local_ip(camip, "ra0");
 	return 0;
 }
 
 
 //static ClientSock_p pClientSocket       = NULL;
-#define HC_ADDRESS		"192.168.1.6"
-#define HC_PORT			1235
+#define HC_ADDRESS			"192.168.1.8"
+#define HC_ADDRESS_POSTFIX	"7"
+#define HC_PORT				1235
 static ClientSock_p	pClientSocket	= NULL;
 static SClient_p	pSClient		= NULL;
+
+int check_camID(Json::Value& root) {
+	std::string read_camid = root["camid"].asString();
+	if (read_camid.compare(camid) != 0)
+		return ERR_WRONG_CAMERA_ID;
+	return 0;
+}
+
+int HC_reply_command_fail_wrongcamid() {
+    Json::Value root;
+    root["camid"] = camid;
+    root["ret"] = RET_WRONG_CAM_ID;
+    JsonCommand_p pJsonCommand = new JsonCommand();
+    pJsonCommand->SetCmdClass(CMD_CLASS_CAM);
+    pJsonCommand->SetCommand(CMD_REP);
+    pJsonCommand->SetJsonObject(root);
+
+    return pSClient->sendJsonCommand(pJsonCommand);
+}
+
+int HC_rep_infos(Json::Value& rep) {
+	rep["camid"] = camid;
+	rep["ret"] = "0";
+	JsonCommand_p pJsonCommand = new JsonCommand();
+	pJsonCommand->SetCmdClass(CMD_CLASS_CAM);
+	pJsonCommand->SetCommand(CMD_REP);
+	pJsonCommand->SetJsonObject(rep);
+
+	return pSClient->sendJsonCommand(pJsonCommand);
+}
+
+int HC_res_cmd(const char *ret) {
+	Json::Value res;
+	res["camid"] = camid;
+	res["res"] = ret;
+	JsonCommand_p pJsonCommand = new JsonCommand();
+	pJsonCommand->SetCmdClass(CMD_CLASS_CAM);
+	pJsonCommand->SetCommand(CMD_REP);
+	pJsonCommand->SetJsonObject(res);
+
+	return pSClient->sendJsonCommand(pJsonCommand);
+}
+
+int HC_command_get(Json::Value& root) {
+	Json::Value rep;
+	int i;
+	const Json::Value& infos = root["info"];
+	for (i = 0; i < infos.size(); ++i) {
+		std::string info = infos[i].asString();
+		if (info.compare(INFO_CAM_ID) == 0)
+			rep[INFO_CAM_ID] = camid;
+		else if (info.compare(INFO_CAM_NAME) == 0)
+			rep[INFO_CAM_NAME] = user;
+		else if (info.compare(INFO_CAM_IP) == 0)
+			rep[INFO_CAM_IP] = camip;
+		else if (info.compare(INFO_CAM_PORT) == 0)
+			rep[INFO_CAM_PORT] = port;
+		else if (info.compare(INFO_CAM_TYPE) == 0)
+			rep[INFO_CAM_TYPE] = CAM_TYPE_ANT_YI;
+	}
+	return HC_rep_infos(rep);
+}
+
+int HC_command_edit(Json::Value& root) {
+	Json::Value rep;
+	if (root.isMember(INFO_CAM_NAME)) {
+		std::string name = root[INFO_CAM_NAME].asString();
+		write_info(FILE_USER, name.c_str(), name.length());
+		rep[INFO_CAM_NAME] = root[INFO_CAM_NAME];
+	}
+	if (root.isMember(INFO_CAM_IP)) {
+		std::string camip = root[INFO_CAM_IP].asString();
+		write_info(FILE_IP, camip.c_str(), camip.length());
+		rep[INFO_CAM_IP] = root[INFO_CAM_IP];
+	}
+	if (root.isMember(INFO_CAM_PORT)) {
+		std::string port = root[INFO_CAM_PORT].asString();
+		write_info(FILE_PORT, port.c_str(), port.length());
+		rep[INFO_CAM_PORT] = root[INFO_CAM_PORT];
+	}
+	return HC_rep_infos(rep);;
+}
+
+int HC_command_reboot() {
+    Json::Value rep;
+    rep["camid"] = camid;
+    rep["res"] = "0";
+	JsonCommand_p pJsonCommand = new JsonCommand();
+	pJsonCommand->SetCmdClass(CMD_CLASS_CAM);
+	pJsonCommand->SetCommand(CMD_REP);
+	pJsonCommand->SetJsonObject(rep);
+
+	return pSClient->sendJsonCommand(pJsonCommand);
+}
+
+int HC_command_start_RTMP(Json::Value& root) {
+	int ret = 0;
+	std::string ip = root["ip"].asString();
+	std::string port = root["port"].asString();
+	std::string application = root["application"].asString();
+	std::string stream =root["stream"].asString();
+
+	if ((ip == "") || (port == "") || (application == "") || (stream == "")) {
+		HC_res_cmd("3");
+		return 3;
+	}
+
+	if ((reInitRTMP == HI_TRUE)) {
+		ret = rtmp_init_client_full(ip, port, application, stream);
+		if (ret != 0) {
+			//RTMP init failed - RTMP not sending
+			reInitRTMP = HI_TRUE;
+			HC_res_cmd("3");
+		}
+		else {
+			//RTMP is sending
+			reInitRTMP = HI_FALSE;
+			HC_res_cmd("0");
+		}
+	}
+	return ret;
+}
+
+int HC_command_stop_RTMP(Json::Value& root) {
+	reInitRTMP = HI_TRUE;
+	sleep(1);
+	rtmp_destroy_client();
+	HC_res_cmd("0");
+	return 0;
+}
+
+int HC_command_cmd(Json::Value& root) {
+	int ret = 0;
+	std::string cmd = root["cmd"].asString();
+	if (cmd.compare(CMD_REBOOT) == 0) {
+		ret = HC_command_reboot();
+		system("reboot");
+		system("reboot");
+	} else if (cmd.compare(CMD_START_RTMP) == 0) {
+		ret = HC_command_start_RTMP(root);
+	} else if (cmd.compare(CMD_STOP_RTMP) == 0) {
+		ret = HC_command_stop_RTMP(root);
+	}
+	return ret;
+}
+
 int process_HC_command(JsonCommand_p pJsoncommand) {
+	int ret = 0;
+	std::string strCmdClass =  pJsoncommand->GetCmdClass();
+	std::string strCmd = pJsoncommand->GetCommand();
+	Json::Value root = pJsoncommand->GetJsonOjbect();
+
+	if (strCmdClass.compare(CMD_CLASS_CAM) != 0)
+		return 0;
+
 	switch (pSClient->getState()) {
 		case SClient::IDLE:
 			break;
 		case SClient::WAIT_AUTHEN:
+			if (strCmd.compare(CMD_AUTH) != 0) {
+				return ERR_COMMAND_NOT_ALLOWED;
+			}
+			else {
+				Json::Value root = pJsoncommand->GetJsonOjbect();
+				std::string ret = root["ret"].asString();
+				if (ret.compare(RET_AUTHEN_SUCCESS) == 0) {
+					pSClient->setState(SClient::WAIT_CMD);
+				}
+			}
+			break;
+		case SClient::WAIT_CMD:
+			ret = check_camID(root);
+			if (ret == ERR_WRONG_CAMERA_ID) {
+				HC_reply_command_fail_wrongcamid();
+				return ERR_WRONG_CAMERA_ID;
+			}
+
+			if (strCmd.compare(CMD_GET) == 0)
+				ret = HC_command_get(root);
+			else if (strCmd.compare(CMD_EDIT) == 0)
+				ret = HC_command_edit(root);
+			else if (strCmd.compare(CMD_CMD) == 0)
+				ret = HC_command_cmd(root);
+			else
+				return ERR_INVALID_COMMAND;
 			break;
 		default:
 			break;
 	}
 
-	return 0;
+	return ret;
 }
 
 int process_HC_Json_command(string data) {
+	int ret = 0;
 	pSClient->addData(data);
 
 	while (pSClient->isCommandValid()) {
@@ -4255,16 +4461,16 @@ int process_HC_Json_command(string data) {
 			printf("command class: \'%s\'\n", pJsoncommand->GetCmdClass().c_str());
 			printf("command: \'%s\'\n", pJsoncommand->GetCommand().c_str());
 			printf("Json value: \'%s\'\n", pJsoncommand->GetJsonValue().c_str());
-			process_HC_command(pJsoncommand);
+			ret = process_HC_command(pJsoncommand);
 			delete pJsoncommand;
 			pJsoncommand = NULL;
 		}
 	}
-	return 0;
+	return ret;
 }
 
 void * thread_read_HC_data_func(HI_VOID *p) {
-	int len;
+	int len, ret;
 	unsigned char *pBuffer = NULL;
 
 	while (TRUE) {
@@ -4272,7 +4478,7 @@ void * thread_read_HC_data_func(HI_VOID *p) {
 		if (len > 0) {
 			std::string data = (char*)pBuffer;
 			printf("read HC data: %s - %d\n", data.c_str(), len);
-			process_HC_Json_command(data);
+			ret = process_HC_Json_command(data);
 			pClientSocket->ResetBuffer();
 		}
 		else {
@@ -4281,17 +4487,23 @@ void * thread_read_HC_data_func(HI_VOID *p) {
 			break;
 		}
 	}
+	pthread_exit(NULL);
 	return NULL;
 }
 
 int test_connect_HC() {
-	pClientSocket = new ClientSock(HC_ADDRESS, HC_PORT);
+	std::string hc_ip = camip;
+	hc_ip = hc_ip.substr(0, hc_ip.rfind(".") + 1) + HC_ADDRESS_POSTFIX;
+	printf("hc_ip is: %s\n", hc_ip.c_str());
+	pClientSocket = new ClientSock(hc_ip.c_str(), HC_PORT);
 	pSClient = new SClient(pClientSocket);
 
 	if (!pClientSocket->Connect()) {
 		printf("connect HC failed\n");
-//		return -1;
+		return -1;
 	}
+
+	pSClient->SendAuthenComand(CAM_TYPE_ANT_YI, camid, user, port);
 
 	pthread_create(&thread_read_HC_data, 0, thread_read_HC_data_func, NULL);
 
@@ -4301,15 +4513,11 @@ int test_connect_HC() {
     getchar();
 
     if (pClientSocket->IsConnected()) {
-		if (!pClientSocket->Close()) {
+		if (!pSClient->Close()) {
 			printf("disconnect HC failed\n");
 			return -1;
 		}
     }
-	if (pClientSocket!= NULL) {
-		delete pClientSocket;
-		pClientSocket = NULL;
-	}
 	if (pSClient != NULL) {
 		delete pSClient;
 		pSClient = NULL;

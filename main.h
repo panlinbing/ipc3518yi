@@ -13,7 +13,7 @@
 #define USE_RTSP			1
 #define USE_RTMP			1
 //#define ALWAYS_SEND_RTMP	1
-#define USE_MOTION_DETECT	1
+//#define USE_MOTION_DETECT	1
 #define USE_TIME_REGION		1
 #define USE_AUDIO_SERVER	1
 #define USE_AUTHEN_REQUEST_STREAM	1
