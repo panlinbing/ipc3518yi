@@ -3354,7 +3354,7 @@ void * connect_server_authen_send_detect_command(void* pParam) {
 	FD_ZERO(&wfds);
 	FD_SET(id, &wfds);
 	struct timeval timeout;
-	timeout.tv_sec = 3;
+	timeout.tv_sec = 7;
 	timeout.tv_usec = 0;
 	ret = connect(id, (struct sockaddr *) &serveraddr, sizeof(serveraddr));
     if (ret == SOCKET_ERROR) {
@@ -4103,11 +4103,19 @@ void InitRtspServer()
 	}
 #endif //USE_RTMP
 
+#ifdef USE_CONNECT_HC
+	connect_HC();
+#endif //USE_CONNECT_HC
+
 	//creat audio server to receive audio data
 //	pthread_create(&threadReceiveAudioData, 0, AudioServerListen, NULL);
 
 	//init VENC and AENC to get video and audio stream
 	s32Ret = create_stream();
+
+#ifdef USE_CONNECT_HC
+	disconnect_HC();
+#endif //USE_CONNECT_HC
 
 #ifdef USE_RTMP
 	if (send_RTMP_to_server) {
@@ -4253,7 +4261,7 @@ int get_camera_info() {
 
 //static ClientSock_p pClientSocket       = NULL;
 #define HC_ADDRESS			"192.168.1.8"
-#define HC_ADDRESS_POSTFIX	"7"
+#define HC_ADDRESS_POSTFIX	"9"
 #define HC_PORT				1235
 static ClientSock_p	pClientSocket	= NULL;
 static SClient_p	pSClient		= NULL;
@@ -4483,7 +4491,6 @@ void * thread_read_HC_data_func(HI_VOID *p) {
 		}
 		else {
 			printf("read HC data: null\n");
-			pClientSocket->Close();
 			break;
 		}
 	}
@@ -4491,27 +4498,26 @@ void * thread_read_HC_data_func(HI_VOID *p) {
 	return NULL;
 }
 
-int test_connect_HC() {
+int connect_HC() {
 	std::string hc_ip = camip;
 	hc_ip = hc_ip.substr(0, hc_ip.rfind(".") + 1) + HC_ADDRESS_POSTFIX;
 	printf("hc_ip is: %s\n", hc_ip.c_str());
+
 	pClientSocket = new ClientSock(hc_ip.c_str(), HC_PORT);
 	pSClient = new SClient(pClientSocket);
 
-	if (!pClientSocket->Connect()) {
+	if (!pSClient->Connect()) {
 		printf("connect HC failed\n");
 		return -1;
 	}
 
 	pSClient->SendAuthenComand(CAM_TYPE_ANT_YI, camid, user, port);
-
 	pthread_create(&thread_read_HC_data, 0, thread_read_HC_data_func, NULL);
 
+	return 0;
+}
 
-    printf("please press twice ENTER to exit this sample\n");
-    getchar();
-    getchar();
-
+int disconnect_HC() {
     if (pClientSocket->IsConnected()) {
 		if (!pSClient->Close()) {
 			printf("disconnect HC failed\n");
@@ -4572,7 +4578,11 @@ int main(int argc, char *argv[])
         	s32Ret = get_cam_id();
         	break;
         case 'H':
-        	s32Ret = test_connect_HC();
+        	s32Ret = connect_HC();
+            printf("please press twice ENTER to exit this sample\n");
+            getchar();
+            getchar();
+        	s32Ret = disconnect_HC();
         	break;
         default:
             printf("the index is invaild!\n");

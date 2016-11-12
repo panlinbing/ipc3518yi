@@ -145,13 +145,13 @@ ClientSock::Connect() {
                 }
             }
 
-            FD_ZERO(&rset);
-            FD_SET(m_idwSockfd, &rset);
+            FD_ZERO(&wset);
+//            FD_SET(m_idwSockfd, &rset);
             FD_SET(m_idwSockfd, &wset);
             tval.tv_sec = CONNECTION_TIMEOUT_SEC;
             tval.tv_usec = 0;
             /* Waiting for the socket to be ready for either reading and writing */
-            if ((idwResult = select(m_idwSockfd + 1, &rset, &wset, NULL, &tval)) == 0) {
+            if ((idwResult = select(m_idwSockfd + 1, NULL, &wset, NULL, &tval)) == 0) {
 //                debug1_clientsock("timeout"); /* timeout */
                 DEBUG1("timeout");
                 m_boIsConnected = FALSE;
@@ -160,30 +160,34 @@ ClientSock::Connect() {
                 return FALSE;
             }
 
-            if (FD_ISSET(m_idwSockfd, &rset) || FD_ISSET(m_idwSockfd, &wset)) {
+//            if (FD_ISSET(m_idwSockfd, &rset) || FD_ISSET(m_idwSockfd, &wset)) {
                 socklen_t dwLen = sizeof(idwError);
                 if (getsockopt(m_idwSockfd, SOL_SOCKET, SO_ERROR, &idwError, &dwLen) < 0) {
                     /* Solaris pending error */
+                	DEBUG1("Error in getsockopt");
                     close(m_idwSockfd);
                     m_boIsConnected = FALSE;
                     return FALSE;
-                } else {
-                    DEBUG1("connected");
-                    m_boIsConnected = TRUE;
                 }
-            } else {
-                close(m_idwSockfd);
-                m_boIsConnected = FALSE;
-                return FALSE;
-            }
+//                else {
+//                    DEBUG1("connected");
+//                    m_boIsConnected = TRUE;
+//                }
+//            } else {
+//                close(m_idwSockfd);
+//                m_boIsConnected = FALSE;
+//                return FALSE;
+//            }
 
             m_boIsConnected = TRUE;
             if (idwError > 0) {
+            	DEBUG1("Error in connection");
                 errno = idwError;
                 close(m_idwSockfd);
                 m_boIsConnected = FALSE;
                 return FALSE;
             }
+            DEBUG1("connected");
     		// set connection back to block
     		nonblock = 0;
     		ioctl(m_idwSockfd, FIONBIO, &nonblock);
@@ -332,6 +336,10 @@ ClientSock::GetBuffer(u8_p *pBuffer) {
         *pBuffer = m_pByBuffer;
         //DEBUG2("len: %d", iLength);
 //        memset(m_pByBuffer, '\0', BUFFER_SOCKET_SIZE);
+        //handle close socket
+        if (iLength == 0) {
+        	Close();
+        }
     }
     return iLength;
 }
@@ -351,7 +359,11 @@ void_t
 ClientSock::PushData(
     u8_t byData
 ) {
-    send(m_idwSockfd, &byData, 1, 0);
+	if (m_boIsConnected && IsWritable(0)) {
+		m_pClientSockLocker->Lock();
+		send(m_idwSockfd, &byData, 1, 0);
+		m_pClientSockLocker->UnLock();
+	}
 }
 
 /**
@@ -365,6 +377,10 @@ ClientSock::PushBuffer(
     u8_p pByBuffer,
     u32_t dwLength
 ) {
-    send(m_idwSockfd, pByBuffer, dwLength, 0);
+	if (m_boIsConnected && IsWritable(0)) {
+		m_pClientSockLocker->Lock();
+		send(m_idwSockfd, pByBuffer, dwLength, 0);
+		m_pClientSockLocker->UnLock();
+	}
 }
 

@@ -90,7 +90,6 @@ public:
 	bool Close();
 
 	bool SendAuthenComand(std::string camType, std::string camid, std::string camname, std::string port);
-	bool SendKeepAliveCommand();
 
 private:
 	std::string mRemainData;
@@ -98,6 +97,13 @@ private:
 	enum State mState;
 	enum DeviceClass mDeviceClass;
 	ClientSock_p m_pClientSock;
+	pthread_t mThreadKeepAlive;
+	bool mThreadKeepAliveRun;
+
+	bool SendKeepAliveCommand();
+	static void * ThreadKeepAliveFunc(void *pData);
+	bool StartThreadKeepAlive();
+	bool StopThreadKeepAlive();
 };
 
 typedef SClient  SClient_t;

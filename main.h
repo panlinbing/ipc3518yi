@@ -7,7 +7,7 @@
 	#define __PACKED__ 
 #endif
 
-//#define RELEASE_NOT_STOP	1
+#define RELEASE_NOT_STOP	1
 #define CHECK_ISP_REGISTER	1
 
 #define USE_RTSP			1
@@ -16,13 +16,15 @@
 //#define USE_MOTION_DETECT	1
 #define USE_TIME_REGION		1
 #define USE_AUDIO_SERVER	1
-#define USE_AUTHEN_REQUEST_STREAM	1
+//#define USE_AUTHEN_REQUEST_STREAM	1
+
+#define USE_CONNECT_HC		1
 
 //server authen to send detect command
 //#define SERVER_AUTHEN_IP	"112.197.10.210"
 #define SERVER_AUTHEN_IP	"192.168.1.6"
 //#define SERVER_AUTHEN_IP	"192.168.20.2"
-#define SERVER_AUTHEN_PORT	1235
+#define SERVER_AUTHEN_PORT	11111
 //#define SERVER_AUTHEN_PORT	6969
 
 #define AUTHENTICATE_KEY_SCTV	"AODSIDSADN2983213bd"
@@ -139,5 +141,7 @@ int sync_time();
 //int destroy_time_region(VENC_GRP VencGrpStart, HI_S32 grpcnt);
 int check_isp_register();
 void * connect_server_authen_send_detect_command(void* pParam);
+int connect_HC();
+int disconnect_HC();
 
 #endif

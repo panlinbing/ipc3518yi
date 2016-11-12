@@ -15,6 +15,8 @@ SClient::SClient(ClientSock_p pClientSock, enum DeviceClass deviceClass) {
 	mState = IDLE;
 	m_pClientSock = pClientSock;
 	mDeviceClass = deviceClass;
+	mThreadKeepAlive = NULL;
+	mThreadKeepAliveRun = FALSE;
 }
 
 SClient::SClient(ClientSock_p pClientSock, std::string data, enum DeviceClass deviceClass) {
@@ -23,6 +25,8 @@ SClient::SClient(ClientSock_p pClientSock, std::string data, enum DeviceClass de
 	mState = IDLE;
 	m_pClientSock = pClientSock;
 	mDeviceClass = deviceClass;
+	mThreadKeepAlive = NULL;
+	mThreadKeepAliveRun = FALSE;
 }
 
 SClient::~SClient() {
@@ -118,15 +122,20 @@ SClient::setState(enum SClient::State state) {
 
 bool
 SClient::Connect() {
-//    if (m_pClientSock != NULL) {
-        return m_pClientSock->Connect();
-//    }
-//    return FALSE;
+	bool ret;
+    if (m_pClientSock != NULL) {
+        ret = m_pClientSock->Connect();
+        if (ret == TRUE)
+        	StartThreadKeepAlive();
+        return ret;
+    }
+    return FALSE;
 }
 
 bool
 SClient::Close() {
     if (m_pClientSock != NULL) {
+    	StopThreadKeepAlive();
         return m_pClientSock->Close();
     }
     return FALSE;
@@ -153,7 +162,39 @@ bool
 SClient::SendKeepAliveCommand() {
 	JsonCommand_p pJsonCommand = new JsonCommand(CMD_CLASS_KALIVE, CMD_REQ, "{}");
 	sendJsonCommand(pJsonCommand);
+	return TRUE;
+}
 
+void *
+SClient::ThreadKeepAliveFunc(void *pData) {
+	SClient_p pSClient = (SClient_p)pData;
+	sleep(3);
+	while (pSClient->mThreadKeepAliveRun) {
+		if (pSClient->m_pClientSock->IsConnected()) {
+			pSClient->SendKeepAliveCommand();
+			sleep(3);
+		}
+		else {
+			pSClient->mThreadKeepAliveRun = FALSE;
+		}
+	}
+	pthread_exit(0);
+	return NULL;
+}
+
+bool
+SClient::StartThreadKeepAlive() {
+	mThreadKeepAliveRun = TRUE;
+	pthread_create(&mThreadKeepAlive, 0, ThreadKeepAliveFunc, this);
+	return TRUE;
+}
+
+bool
+SClient::StopThreadKeepAlive() {
+	if (mThreadKeepAliveRun) {
+		mThreadKeepAliveRun = FALSE;
+		pthread_join(mThreadKeepAlive, 0);
+	}
 	return TRUE;
 }
 
