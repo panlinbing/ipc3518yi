@@ -64,15 +64,15 @@ int rtmp_create_stream(std::string url)
 	return 0;
 }
 
-int rtmp_init_client(char* client) {
+int rtmp_init_client_streamname(char* client) {
 	string key = client;
 
 //SCTV
 //	string url = "rtmp://112.197.10.222:1935/lumi_test/tokenTest123456789";
-	string url = "rtmp://112.197.10.222:1935/lumi_test/" + key;
+//	string url = "rtmp://112.197.10.222:1935/lumi_test/" + key;
 //Lumi
 //	string url = "rtmp://192.168.100.12:1935/live/tokenTest123456789";
-//	string url = "rtmp://192.168.1.107:1935/live/" + key;
+	string url = "rtmp://192.168.1.30:1935/live/stream" + key;
 //May ao
 //	string url = "rtmp://192.168.1.10:1935/live/stream";
 //Forward port
@@ -89,6 +89,10 @@ int rtmp_init_client(char* client) {
 int rtmp_init_client_full(std::string ip, std::string port, std::string application, std::string stream) {
 	std::string url = "rtmp://" + ip + ":" + port + "/" + application + "/" + stream;
 	return rtmp_create_stream(url);
+}
+
+int rtmp_init_client_rtmp_url(std::string rtmp_url) {
+	return rtmp_create_stream(rtmp_url);
 }
 
 int rtmp_send_h264_raw_stream(char* data, int size, u_int32_t dts, u_int32_t pts) {

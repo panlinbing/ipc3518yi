@@ -14,7 +14,7 @@
 
 #include "loadbmp.h"
 #include "region.h"
-//#include "sample_comm.h"
+#include "config.h"
 
 #include <unistd.h>
 
@@ -511,6 +511,7 @@ int create_time_region(VENC_GRP VencGrpStart, HI_S32 grpcnt, PIC_SIZE_E *enSize)
     /*********************************************
      step 6: logo
     *********************************************/
+#ifndef USE_VIETTEL_IDC
     for (i = 0; i < grpcnt; i++)
     {
     	stRgnAttrLogo[i].enType = OVERLAY_RGN;
@@ -602,8 +603,8 @@ int create_time_region(VENC_GRP VencGrpStart, HI_S32 grpcnt, PIC_SIZE_E *enSize)
             free(stBitmap.pData);
             stBitmap.pData = NULL;
         }
-
     }
+#endif //USE_VIETTEL_IDC
 
 ERR_MALLOC:
     return s32Ret;

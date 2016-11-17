@@ -18,6 +18,11 @@
 #include "vda.h"
 #include "ClientSock.hpp"
 #include "Sclient.hpp"
+//#ifdef USE_VIETTEL_IDC
+#include "aes.h"
+#include "curl/curl.h"
+#include <iomanip>
+//#endif //USE_VIETTEL_IDC
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,6 +30,7 @@
 #include <unistd.h>
 #include <signal.h>
 #include <errno.h>
+#include <stdint.h>
 
 #include <netdb.h>
 #include <sys/socket.h>
@@ -36,6 +42,8 @@
 #include <netinet/if_ether.h>
 #include <net/if.h>
 #include <ifaddrs.h>
+
+#include <netinet/tcp.h>
 
 //#include <linux/if_ether.h>
 //#include <linux/sockios.h>
@@ -346,6 +354,7 @@ void SAMPLE_VENC_Usage(char *sPrgNm)
     printf("\t S: stream RTMP to server.\n");
     printf("\t 7: get cam id.\n");
     printf("\t H: test connect HC.\n");
+    printf("\t V: test_Viettel_IDC.\n");
 
     return;
 }
@@ -1364,7 +1373,7 @@ int OptionAnswer(char *cseq, int sock)
 		memset(buf,0,1024);
 		char *pTemp = buf;
 		pTemp += sprintf(pTemp,"RTSP/1.0 200 OK\r\nCSeq: %s\r\n%sPublic: %s\r\n\r\n",
-			cseq,dateHeader(),"OPTIONS,DESCRIBE,SETUP,PLAY,PAUSE,TEARDOWN");
+			cseq,dateHeader(),"OPTIONS, DESCRIBE, SETUP, PLAY, PAUSE, TEARDOWN");
 
 		int reg = send(sock, buf,strlen(buf),0);
 		if(reg <= 0)
@@ -1409,17 +1418,17 @@ int DescribeAnswer(char *cseq,int sock,char * urlSuffix,char* recvbuf)
 
 		pTemp2 += sprintf(pTemp2,"t=0 0\r\n");
 
-//		pTemp2 += sprintf(pTemp2,"a=DevVer:pusher2\r\n");
-//		pTemp2 += sprintf(pTemp2,"a=GroupName:IPCAM\r\n");
-//		pTemp2 += sprintf(pTemp2,"a=NickName:CIF\r\n");
-//		pTemp2 += sprintf(pTemp2,"a=CfgSection:PROG_CHN0\r\n");
-//		pTemp2 += sprintf(pTemp2,"a=tool:LIVE555 Streaming Media v2011.08.13\r\n");
-//		pTemp2 += sprintf(pTemp2,"a=type:broadcast\r\n");
-//
-//		pTemp2 += sprintf(pTemp2,"a=control:*\r\n");
-//		pTemp2 += sprintf(pTemp2,"a=range:npt=0-\r\n");
-//		pTemp2 += sprintf(pTemp2,"a=x-qt-text-nam:H.264 Program Stream\r\n");
-//		pTemp2 += sprintf(pTemp2,"a=x-qt-text-inf:%s\r\n", urlSuffix);
+		pTemp2 += sprintf(pTemp2,"a=DevVer:pusher2\r\n");
+		pTemp2 += sprintf(pTemp2,"a=GroupName:IPCAM\r\n");
+		pTemp2 += sprintf(pTemp2,"a=NickName:CIF\r\n");
+		pTemp2 += sprintf(pTemp2,"a=CfgSection:PROG_CHN0\r\n");
+		pTemp2 += sprintf(pTemp2,"a=tool:LIVE555 Streaming Media v2011.08.13\r\n");
+		pTemp2 += sprintf(pTemp2,"a=type:broadcast\r\n");
+
+		pTemp2 += sprintf(pTemp2,"a=control:*\r\n");
+		pTemp2 += sprintf(pTemp2,"a=range:npt=0-\r\n");
+		pTemp2 += sprintf(pTemp2,"a=x-qt-text-nam:H.264 Program Stream\r\n");
+		pTemp2 += sprintf(pTemp2,"a=x-qt-text-inf:%s\r\n", urlSuffix);
 
 		/*H264 TrackID=0 RTP_PT 96*/
 		pTemp2 += sprintf(pTemp2,"m=video 0 RTP/AVP 96\r\n");
@@ -1448,7 +1457,7 @@ int DescribeAnswer(char *cseq,int sock,char * urlSuffix,char* recvbuf)
 			pTemp2 += sprintf(pTemp2,"a=cliprect:0,0,640,360\r\n");
 		}
 
-#if 1
+#if 0
 		/*G726*/
 		/*TODO */
 		pTemp2 += sprintf(pTemp2,"m=audio 0 RTP/AVP 97\r\n");
@@ -1602,7 +1611,7 @@ int SetupAnswer(char *cseq,int sock,int SessionId,char * urlSuffix,char* recvbuf
 		}
 		else {
 			pTemp += sprintf(pTemp,"RTSP/1.0 200 OK\r\nCSeq: %s\r\n%sTransport: RTP/AVP/TCP;unicast;destination=%s;source=%s;interleaved=%d-%d;ssrc=0000000a\r\nSession: %d\r\n\r\n",
-				cseq,dateHeader(),"192.168.100.12","192.168.100.50",
+				cseq,dateHeader(),"192.168.1.30","192.168.1.52",
 				rtpChannelId,
 				rtpChannelId + 1,
 				SessionId);
@@ -1837,6 +1846,28 @@ void * RtspServerListen(void*pParam)
     {
         return (void *)(-1);
     }
+
+
+	//test
+	socklen_t optlen = sizeof(s32Socket_opt_value);
+
+	s32Socket_opt_value = 1;
+	setsockopt(s32Socket, IPPROTO_TCP, TCP_NODELAY, &s32Socket_opt_value, optlen);
+
+	getsockopt(s32Socket, IPPROTO_TCP, TCP_NODELAY, &s32Socket_opt_value, &optlen);
+	if (s32Socket_opt_value < 0)
+		printf("TCP_NODELAY error \n");
+	else
+		printf("TCP_NODELAY = %d\n", s32Socket_opt_value);
+
+	getsockopt(s32Socket, IPPROTO_TCP, TCP_CORK, &s32Socket_opt_value, &optlen);
+	if (s32Socket_opt_value < 0)
+		printf("TCP_CORK error \n");
+	else
+		printf("TCP_CORK = %d\n", s32Socket_opt_value);
+	//end
+
+
     s32Rtn = bind(s32Socket, (struct sockaddr *)&servaddr, sizeof(struct sockaddr_in));
     if(s32Rtn < 0)
     {
@@ -2106,32 +2137,32 @@ HI_S32 VENC_Sent(char *buffer, int buflen, int channel)
 			continue;
 		}
 
-		int heart = g_rtspClients[is].seqnum % 1000;
-
-		if(heart==0 && g_rtspClients[is].seqnum!=0)
-		{
-			char buf[1024];
-			memset(buf,0,1024);
-			char *pTemp = buf;
-			pTemp += sprintf(pTemp,"RTSP/1.0 200 OK\r\nCSeq: %d\r\nPublic: %s\r\n\r\n",
-				0,"OPTIONS,DESCRIBE,SETUP,PLAY,PAUSE,TEARDOWN");
-
-			int reg = send(g_rtspClients[is].socket, buf,strlen(buf),0);
-			if(reg <= 0)
-			{
-				//printf("RTSP:Send Error---- %d\n",reg);
-				g_rtspClients[is].status = RTSP_IDLE;
-				g_rtspClients[is].seqnum = 0;
-				g_rtspClients[is].tsvid = 0;
-				g_rtspClients[is].tsaud = 0;
-				close(g_rtspClients[is].socket);
-				continue;
-			}
-			else
-			{
-				printf("Heart:%d\n",reg);
-			}
-		}
+//		int heart = g_rtspClients[is].seqnum % 1000;
+//
+//		if(heart==0 && g_rtspClients[is].seqnum!=0)
+//		{
+//			char buf[1024];
+//			memset(buf,0,1024);
+//			char *pTemp = buf;
+//			pTemp += sprintf(pTemp,"RTSP/1.0 200 OK\r\nCSeq: %d\r\nPublic: %s\r\n\r\n",
+//				0,"OPTIONS,DESCRIBE,SETUP,PLAY,PAUSE,TEARDOWN");
+//
+//			int reg = send(g_rtspClients[is].socket, buf,strlen(buf),0);
+//			if(reg <= 0)
+//			{
+//				//printf("RTSP:Send Error---- %d\n",reg);
+//				g_rtspClients[is].status = RTSP_IDLE;
+//				g_rtspClients[is].seqnum = 0;
+//				g_rtspClients[is].tsvid = 0;
+//				g_rtspClients[is].tsaud = 0;
+//				close(g_rtspClients[is].socket);
+//				continue;
+//			}
+//			else
+//			{
+//				printf("Heart:%d\n",reg);
+//			}
+//		}
 
 		char* nalu_payload;
 		int nAvFrmLen = 0;
@@ -2190,6 +2221,9 @@ HI_S32 VENC_Sent(char *buffer, int buflen, int channel)
 		rtp_hdr->marker    = 0;
 		rtp_hdr->ssrc      = htonl(10);
 
+		timestampRTP = PTS_INC * 32000 / 49;
+		g_rtspClients[is].tsvid = (unsigned int)timestampRTP;
+
 		rtp_hdr->timestamp=htonl(g_rtspClients[is].tsvid);
 
 		if(nAvFrmLen<=nalu_sent_len)
@@ -2223,8 +2257,8 @@ HI_S32 VENC_Sent(char *buffer, int buflen, int channel)
 
 //			g_rtspClients[is].tsvid = g_rtspClients[is].tsvid+timestamp_increse;
 //			g_rtspClients[is].tsvid = PTS_INC * 1800;
-			timestampRTP = PTS_INC * 32000 / 49;
-			g_rtspClients[is].tsvid = (unsigned int)timestampRTP;
+//			timestampRTP = PTS_INC * 32000 / 49;
+//			g_rtspClients[is].tsvid = (unsigned int)timestampRTP;
 		}
 		else if(nAvFrmLen>nalu_sent_len)
 		{
@@ -2344,8 +2378,8 @@ HI_S32 VENC_Sent(char *buffer, int buflen, int channel)
 			}
 //			g_rtspClients[is].tsvid = g_rtspClients[is].tsvid+timestamp_increse;
 //			g_rtspClients[is].tsvid = PTS_INC * 1800;
-			timestampRTP = PTS_INC * 32000 / 49;
-			g_rtspClients[is].tsvid = (unsigned int)timestampRTP;
+//			timestampRTP = PTS_INC * 32000 / 49;
+//			g_rtspClients[is].tsvid = (unsigned int)timestampRTP;
 		}
 
 	}
@@ -2701,6 +2735,8 @@ HI_S32 AENC_Sent(AUDIO_STREAM_S stream) {
 
 //			g_rtspClients[is].tsaud = g_rtspClients[is].tsaud + timestamp_increse;
 
+			g_rtspClients[is].tsaud = PTS_INC * 160;
+
 			rtp_hdr_audio->timestamp = htonl(g_rtspClients[is].tsaud);
 //			sendto(udpfd_audio, sendbuf_aenc_sent, sendlen, 0, (struct sockaddr *)&server, sizeof(server));
 
@@ -2713,7 +2749,7 @@ HI_S32 AENC_Sent(AUDIO_STREAM_S stream) {
 			}
 
 //			g_rtspClients[is].tsaud = g_rtspClients[is].tsaud + timestamp_increse;
-			g_rtspClients[is].tsaud = PTS_INC * 160;
+//			g_rtspClients[is].tsaud = PTS_INC * 160;
 		}
 	}
 
@@ -2904,7 +2940,7 @@ void *thread_init_RTMP(void *parg) {
 
 	while (HI_TRUE) {
 		if ((reInitRTMP == HI_TRUE) && has_server_key) {
-			s32Ret = rtmp_init_client(authen_key);
+			s32Ret = rtmp_init_client_streamname(authen_key);
 			if (s32Ret != 0) {
 				//RTMP init failed - RTMP not sending
 				reInitRTMP = HI_TRUE;
@@ -4096,32 +4132,37 @@ void InitRtspServer()
 	pthread_create(&threadAuthenServer, 0, AuthenServerListen, NULL);
 #endif //USE_AUTHEN_REQUEST_STREAM
 
-#ifdef USE_RTMP
+#ifdef USE_RTMP_THREAD_SCTV
 	//init rtmp client
 	if (send_RTMP_to_server) {
 		pthread_create(&threadInitRTMP, 0, thread_init_RTMP, NULL);
 	}
-#endif //USE_RTMP
+#endif //USE_RTMP_THREAD_SCTV
 
 #ifdef USE_CONNECT_HC
 	connect_HC();
 #endif //USE_CONNECT_HC
 
-	//creat audio server to receive audio data
-//	pthread_create(&threadReceiveAudioData, 0, AudioServerListen, NULL);
+#ifdef USE_VIETTEL_IDC
+	Viettel_IDC_start_rtmp_stream();
+#endif //USE_VIETTEL_IDC
 
 	//init VENC and AENC to get video and audio stream
 	s32Ret = create_stream();
+
+#ifdef USE_VIETTEL_IDC
+	Viettel_IDC_stop_rtmp_stream();
+#endif //USE_VIETTEL_IDC
 
 #ifdef USE_CONNECT_HC
 	disconnect_HC();
 #endif //USE_CONNECT_HC
 
-#ifdef USE_RTMP
+#ifdef USE_RTMP_THREAD_SCTV
 	if (send_RTMP_to_server) {
 		rtmp_destroy_client();
 	}
-#endif //USE_RTMP
+#endif //USE_RTMP_THREAD_SCTV
 
 	//exit
 	if (HI_SUCCESS == s32Ret)
@@ -4258,10 +4299,12 @@ int get_camera_info() {
 	return 0;
 }
 
-
+/******************************************************************************
+* group: connect HC - manager request
+******************************************************************************/
 //static ClientSock_p pClientSocket       = NULL;
 #define HC_ADDRESS			"192.168.1.8"
-#define HC_ADDRESS_POSTFIX	"9"
+#define HC_ADDRESS_POSTFIX	"7"
 #define HC_PORT				1235
 static ClientSock_p	pClientSocket	= NULL;
 static SClient_p	pSClient		= NULL;
@@ -4531,6 +4574,270 @@ int disconnect_HC() {
 	return 0;
 }
 
+/******************************************************************************
+* group: Viettel IDC - HTTP POST - RTMP
+******************************************************************************/
+#ifdef USE_VIETTEL_IDC
+#define VTIDC_AUTHEN_SERVER	"http://125.212.227.174/cloud-camera/services/camera"
+#define VTIDC_AUTHEN_SERVER_PUSH "http://125.212.227.174/cloud-camera/services/camera/push"
+#define VTIDC_AUTHEN_SERVER_PULL "http://125.212.227.174/cloud-camera/services/camera/pull"
+#define AES128_KEY				"cloudcameraVTIDC"
+#define CLOUD_ID				"cloudidtest01"
+#define SECURE_CODE				"123456"
+#define DEVICE_SERIAL			"23172463"
+#define AES_BLOCK_NUM_BYTE		16
+
+unsigned char plain_data[300];
+unsigned char cipher_data[300];
+unsigned char aes128_key[16];
+//unsigned char send_buff[600];
+
+// prints string as hex
+void phex(uint8_t* str)
+{
+    unsigned char i;
+    for(i = 0; i < 16; ++i)
+        printf("%.2x", str[i]);
+    printf("\n");
+}
+
+int encrypt_string(std::string input_str) {
+	int i, num_block, str_len;
+	unsigned char pad_byte;
+
+	//remove \n if exist in input_str
+	if (input_str[input_str.length() - 1] == '\n') {
+		input_str = input_str.substr(0, input_str.length() - 1);
+	}
+	str_len = input_str.length();
+	//calculate pad byte
+	//if len % 16 = 0 -> pad 16 byte 0x10
+	pad_byte = 16 - (str_len % 16);
+	memset(plain_data, pad_byte, 300);
+
+	strcpy((char *)plain_data, input_str.c_str());
+	strcpy((char *)aes128_key, AES128_KEY);
+
+
+	plain_data[input_str.length()] = pad_byte;
+	num_block = input_str.length() / AES_BLOCK_NUM_BYTE + 1;
+
+	//debug - print plain text
+    printf("plain text: - %d - %d - pad - 0x%2x\n", input_str.length(), num_block, pad_byte);
+    for(i = 0; i < num_block; ++i)
+    {
+        phex(plain_data + i * (uint8_t) AES_BLOCK_NUM_BYTE);
+    }
+    printf("\n");
+
+    //debug - print cipher text
+    printf("ciphertext:\n");
+    for(i = 0; i < num_block; ++i)
+    {
+        AES128_ECB_encrypt(plain_data + (i*16), aes128_key, cipher_data+(i*16));
+        phex(cipher_data + (i*16));
+    }
+    printf("\n");
+	return num_block * 16;
+}
+
+std::string decrypt_string(int num_block) {
+	int i;
+	unsigned char pad_byte = 0;
+
+	printf("plain text: - %d\n", num_block);
+    for(i = 0; i < num_block; ++i)
+    {
+    	AES128_ECB_decrypt(cipher_data + (i*16), aes128_key, plain_data+(i*16));
+        phex(plain_data + (i*16));
+    }
+
+    //remove pad byte
+	if (plain_data[num_block * 16 - 1] != '}')
+		pad_byte = plain_data[num_block * 16 - 1];
+    for (i = 0; i < pad_byte; i++)
+    	plain_data[num_block * 16 - i] = '\0';
+
+    std::string json_link(reinterpret_cast<const char*>(plain_data));
+	return json_link;
+}
+
+//TRUE - rtmp; FALSE - rtsp
+std::string VTIDC_create_message(bool rtmp) {
+	int num_chars;
+	//Create encrypted data -> cipher_data
+	Json::FastWriter fastWriter;
+	Json::Value root;
+	std::string input_str;
+	root["cloudId"] = CLOUD_ID;
+	root["secureCode"] = SECURE_CODE;
+	root["deviceSerial"] = DEVICE_SERIAL;
+	if (!rtmp) {
+		root["mainStream"] = "rtsp://123.16.3.190:554/ch0.h264";
+		root["subStream"] = "rtsp://123.16.3.190:554/ch1.h264";
+	}
+
+	input_str = fastWriter.write(root);
+	printf("input_str: %d - %s\n", input_str.length(), input_str.c_str());
+
+	num_chars = encrypt_string(input_str);
+
+	//convert cipher_data to string. Ex: 0x2a -> "2a"
+	std::stringstream ss;
+	for(int i=0; i<num_chars; ++i)
+	    ss << std::hex << std::setfill('0') << std::setw(2) << (int)cipher_data[i];
+	std::string mystr = ss.str();
+
+	//create Json message - {"data":"aes128msg"}
+	root.clear();
+	root["data"] = mystr;
+	input_str = fastWriter.write(root);
+	return fastWriter.write(root);
+}
+
+static size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *userp)
+{
+    ((std::string*)userp)->append((char*)contents, size * nmemb);
+    return size * nmemb;
+}
+
+std::string VTIDC_send_http_post(const char* server_url, std::string send_str) {
+	CURL *curl;
+	CURLcode res;
+	std::string readString;
+
+	/* In windows, this will init the winsock stuff */
+	curl_global_init(CURL_GLOBAL_ALL);
+
+	/* get a curl handle */
+	curl = curl_easy_init();
+	if(curl) {
+		/* send all data to this function  */
+	    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+	    /* we pass our readString to the callback function */
+	    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readString);
+
+		/* First set the URL that is about to receive our POST. This URL can
+		 just as well be a https:// URL if that is what should receive the
+		 data. */
+		curl_easy_setopt(curl, CURLOPT_URL, server_url);
+
+		//char v_ct[64] = "Content-Type: application/json";
+		struct curl_slist *curlHeader = NULL;
+		curlHeader = curl_slist_append(curlHeader, "Content-Type: application/json");
+		curl_easy_setopt(curl, CURLOPT_HTTPHEADER, curlHeader);
+
+		/* Now specify the POST data */
+		curl_easy_setopt(curl, CURLOPT_POSTFIELDS, send_str.c_str());
+
+		/* Perform the request, res will get the return code */
+		res = curl_easy_perform(curl);
+		/* Check for errors */
+		if(res != CURLE_OK)
+			fprintf(stderr, "curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
+
+		/* always cleanup */
+		curl_easy_cleanup(curl);
+
+		/* free the custom headers */
+		curl_slist_free_all(curlHeader);
+	}
+	curl_global_cleanup();
+	return readString;
+}
+
+std::string VTIDC_parse_recv_message(std::string recv_str) {
+	Json::Reader reader;
+	Json::Value root;
+	std::string rtmp_url;
+
+	if (reader.parse(recv_str, root)) {
+		int status = root["status"].asInt();
+		std::string message = root["message"].asString();
+
+		if ((status == 0) && (message.compare("success") == 0)) {
+			std::string data = root["data"].asString();
+			if (data != "") {
+				//convert recv string to cipher data. Ex: "2a" -> 0x2a
+				int len = data.length();
+				int i;
+				for (i = 0; i < len; i += 2) {
+					std::string byte = data.substr(i, 2);
+					cipher_data[i / 2] = strtol(byte.c_str(), NULL, 16);
+			    }
+
+			    int num_block = (len / 2 + 15) / AES_BLOCK_NUM_BYTE;
+
+			    printf("ciphertext: %d - %d \n", len, num_block);
+			    for(i = 0; i < num_block; ++i)
+			    {
+			        phex(cipher_data + (i*16));
+			    }
+			    printf("\n");
+
+			    std::string json_link = decrypt_string(num_block);
+			    Json::Value root_link;
+
+			    if (reader.parse(json_link, root_link)) {
+			    	rtmp_url = root_link["streamingServer"].asString();
+			    }
+			}
+		}
+	}
+	return rtmp_url;
+}
+
+std::string VTIDC_get_rtmp_link() {
+	//create message to send http post - rtmp
+//	std::string send_str = VTIDC_create_message(TRUE);
+	std::string send_str = VTIDC_create_message(FALSE);
+	printf("send_str: %d - %s\n", send_str.length(), send_str.c_str());
+
+	//send http post message - push server
+//	std::string recv_str = VTIDC_send_http_post(VTIDC_AUTHEN_SERVER_PUSH, send_str);
+	std::string recv_str = VTIDC_send_http_post(VTIDC_AUTHEN_SERVER_PULL, send_str);
+	printf("recv_str: %d - %s\n", recv_str.length(), recv_str.c_str());
+
+	//parse recv message
+	std::string rtmp_url;// = VTIDC_parse_recv_message(recv_str);
+	printf("rtmp_url: %d - %s\n", rtmp_url.length(), rtmp_url.c_str());
+
+	return rtmp_url;
+}
+
+int Viettel_IDC_start_rtmp_stream() {
+	//test
+//	std::string input_str = "{\"cloudId\":\"VTxO3fwlrgEb22\",\"secureCode\":\"VTIDC123\",\"deviceSerial\":\"518395999\",\"mainStream\":\"rtsp://117.0.33.37:32509/ch1/main\",\"subStream\":\"rtsp://117.0.33.37:32509/ch1/sub\"}";
+//	encrypt_string(input_str);
+
+	int ret = 0;
+	//http post - authen server to get rtmp url
+	std::string rtmp_url = VTIDC_get_rtmp_link();
+
+	//send rtmp stream to rtmp url
+	if ((reInitRTMP == HI_TRUE) && (rtmp_url != "")) {
+		ret = rtmp_init_client_rtmp_url(rtmp_url);
+		if (ret != 0) {
+			//RTMP init failed - RTMP not sending
+			reInitRTMP = HI_TRUE;
+		}
+		else {
+			//RTMP is sending
+			reInitRTMP = HI_FALSE;
+		}
+	}
+	return ret;
+}
+
+int Viettel_IDC_stop_rtmp_stream() {
+	reInitRTMP = HI_TRUE;
+	sleep(1);
+	rtmp_destroy_client();
+	return 0;
+}
+
+#endif //USE_VIETTEL_IDC
+
 
 /******************************************************************************
 * function    : main()
@@ -4583,6 +4890,15 @@ int main(int argc, char *argv[])
             getchar();
             getchar();
         	s32Ret = disconnect_HC();
+        	break;
+        case 'V':
+#ifdef USE_VIETTEL_IDC
+        	s32Ret = Viettel_IDC_start_rtmp_stream();
+            printf("please press twice ENTER to exit this sample\n");
+            getchar();
+            getchar();
+            Viettel_IDC_stop_rtmp_stream();
+#endif //USE_VIETTEL_IDC
         	break;
         default:
             printf("the index is invaild!\n");

@@ -32,8 +32,9 @@
 * funciton	: rtmp_init_client
 * usage		: call to init rtmp client to send stream to rtmp server
 ******************************************************************************/
-int rtmp_init_client(char* client);
+int rtmp_init_client_streamname(char* client);
 int rtmp_init_client_full(std::string ip, std::string port, std::string application, std::string stream);
+int rtmp_init_client_rtmp_url(std::string rtmp_url);
 
 /******************************************************************************
 * funciton	: rtmp_send_h264_raw_stream

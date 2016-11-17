@@ -41,7 +41,7 @@ C_DEPS += \
 common/%.o: ../common/%.c
 	@echo 'Building file: $<'
 	@echo 'Invoking: Cross GCC Compiler'
-	arm-hisiv100nptl-linux-gcc -DSENSOR_TYPE=OMNI_OV9712_DC_720P_30FPS -DISP_V1 -DHI_XXXX -DHI_RELEASE -DHICHIP=0x35180100 -Dhi3518 -I/home/hoang/camera_ip/mpp/include -I"/home/hoang/workspaceCameraIP/wifi_login/common" -I/home/hoang/camera_ip/mpp/extdrv/tw2865 -O3 -Wall -c -fmessage-length=0 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@)" -o  "$@" "$<"
+	arm-hisiv100nptl-linux-gcc -DSENSOR_TYPE=OMNI_OV9712_DC_720P_30FPS -DISP_V1 -DHI_XXXX -DHI_RELEASE -DHICHIP=0x35180100 -Dhi3518 -I/home/hoang/camera_ip/mpp/include -I"/home/hoang/workspaceCameraIP/ipc3518yi/include" -I"/home/hoang/workspaceCameraIP/ipc3518yi/common" -I/home/hoang/camera_ip/mpp/extdrv/tw2865 -O3 -Wall -c -fmessage-length=0 -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@)" -o  "$@" "$<"
 	@echo 'Finished building: $<'
 	@echo ' '
 

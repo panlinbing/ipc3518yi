@@ -32,3 +32,4 @@
 *.sql
 *.sqlite
 
+/Release/

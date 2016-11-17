@@ -7,18 +7,7 @@
 	#define __PACKED__ 
 #endif
 
-#define RELEASE_NOT_STOP	1
-#define CHECK_ISP_REGISTER	1
-
-#define USE_RTSP			1
-#define USE_RTMP			1
-//#define ALWAYS_SEND_RTMP	1
-//#define USE_MOTION_DETECT	1
-#define USE_TIME_REGION		1
-#define USE_AUDIO_SERVER	1
-//#define USE_AUTHEN_REQUEST_STREAM	1
-
-#define USE_CONNECT_HC		1
+#include "config.h"
 
 //server authen to send detect command
 //#define SERVER_AUTHEN_IP	"112.197.10.210"
@@ -143,5 +132,10 @@ int check_isp_register();
 void * connect_server_authen_send_detect_command(void* pParam);
 int connect_HC();
 int disconnect_HC();
+
+#ifdef USE_VIETTEL_IDC
+int Viettel_IDC_start_rtmp_stream();
+int Viettel_IDC_stop_rtmp_stream();
+#endif //USE_VIETTEL_IDC
 
 #endif
