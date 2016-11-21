@@ -145,6 +145,9 @@ static pthread_t thread_detect_check_time_left;
 //HC
 static pthread_t thread_read_HC_data;
 
+//VTIDC
+static std::string VTIDC_rtmp_url;
+
 //cam info
 static char user[MAX_USER_PASS_LEN];
 static char pass[MAX_USER_PASS_LEN];
@@ -2394,8 +2397,9 @@ HI_S32 VENC_Sent(char *buffer, int buflen, int channel)
 		dts = pts = (u_int32_t)timestampRTP;
 		if (rtmp_send_h264_raw_stream(buffer, buflen, dts, pts) == -2) {
 			printf("%s: rtmp_send_h264_raw_stream send failed\n", __func__);
-			rtmp_destroy_client();
 			reInitRTMP = HI_TRUE;
+			sleep(1);
+			rtmp_destroy_client();
 		}
 	}
 	//end test server
@@ -2765,8 +2769,9 @@ HI_S32 AENC_Sent(AUDIO_STREAM_S stream) {
 		pts = (u_int32_t)timestampRTP;
 		if (rtmp_send_audio_raw_stream(sendbuf_aenc_sent, buflen , pts)) {
 			printf("%s: rtmp_send_audio_raw_stream send failed\n", __func__);
-			rtmp_destroy_client();
 			reInitRTMP = HI_TRUE;
+			sleep(1);
+			rtmp_destroy_client();
 		}
 	}
 
@@ -2940,7 +2945,12 @@ void *thread_init_RTMP(void *parg) {
 
 	while (HI_TRUE) {
 		if ((reInitRTMP == HI_TRUE) && has_server_key) {
+#ifdef USE_VIETTEL_IDC
+			std::string rtmp_url = *(std::string*)parg;
+			s32Ret = rtmp_init_client_rtmp_url(rtmp_url);
+#else
 			s32Ret = rtmp_init_client_streamname(authen_key);
+#endif //USE_VIETTEL_IDC
 			if (s32Ret != 0) {
 				//RTMP init failed - RTMP not sending
 				reInitRTMP = HI_TRUE;
@@ -4132,37 +4142,37 @@ void InitRtspServer()
 	pthread_create(&threadAuthenServer, 0, AuthenServerListen, NULL);
 #endif //USE_AUTHEN_REQUEST_STREAM
 
-#ifdef USE_RTMP_THREAD_SCTV
+#ifdef USE_RTMP_INIT_THREAD
 	//init rtmp client
 	if (send_RTMP_to_server) {
-		pthread_create(&threadInitRTMP, 0, thread_init_RTMP, NULL);
+		pthread_create(&threadInitRTMP, 0, thread_init_RTMP, &VTIDC_rtmp_url);
 	}
-#endif //USE_RTMP_THREAD_SCTV
+#endif //USE_RTMP_INIT_THREAD
 
 #ifdef USE_CONNECT_HC
 	connect_HC();
 #endif //USE_CONNECT_HC
 
 #ifdef USE_VIETTEL_IDC
-	Viettel_IDC_start_rtmp_stream();
+	s32Ret = VTIDC_start_rtmp_stream();
 #endif //USE_VIETTEL_IDC
 
 	//init VENC and AENC to get video and audio stream
 	s32Ret = create_stream();
 
 #ifdef USE_VIETTEL_IDC
-	Viettel_IDC_stop_rtmp_stream();
+	VTIDC_stop_rtmp_stream();
 #endif //USE_VIETTEL_IDC
 
 #ifdef USE_CONNECT_HC
 	disconnect_HC();
 #endif //USE_CONNECT_HC
 
-#ifdef USE_RTMP_THREAD_SCTV
+#ifdef USE_RTMP_INIT_THREAD
 	if (send_RTMP_to_server) {
 		rtmp_destroy_client();
 	}
-#endif //USE_RTMP_THREAD_SCTV
+#endif //USE_RTMP_INIT_THREAD
 
 	//exit
 	if (HI_SUCCESS == s32Ret)
@@ -4789,47 +4799,53 @@ std::string VTIDC_parse_recv_message(std::string recv_str) {
 
 std::string VTIDC_get_rtmp_link() {
 	//create message to send http post - rtmp
-//	std::string send_str = VTIDC_create_message(TRUE);
-	std::string send_str = VTIDC_create_message(FALSE);
+	std::string send_str = VTIDC_create_message(TRUE);
+//	std::string send_str = VTIDC_create_message(FALSE);
 	printf("send_str: %d - %s\n", send_str.length(), send_str.c_str());
 
 	//send http post message - push server
-//	std::string recv_str = VTIDC_send_http_post(VTIDC_AUTHEN_SERVER_PUSH, send_str);
-	std::string recv_str = VTIDC_send_http_post(VTIDC_AUTHEN_SERVER_PULL, send_str);
+	std::string recv_str = VTIDC_send_http_post(VTIDC_AUTHEN_SERVER_PUSH, send_str);
+//	std::string recv_str = VTIDC_send_http_post(VTIDC_AUTHEN_SERVER_PULL, send_str);
 	printf("recv_str: %d - %s\n", recv_str.length(), recv_str.c_str());
 
 	//parse recv message
-	std::string rtmp_url;// = VTIDC_parse_recv_message(recv_str);
+	std::string rtmp_url = VTIDC_parse_recv_message(recv_str);
 	printf("rtmp_url: %d - %s\n", rtmp_url.length(), rtmp_url.c_str());
 
 	return rtmp_url;
 }
 
-int Viettel_IDC_start_rtmp_stream() {
-	//test
-//	std::string input_str = "{\"cloudId\":\"VTxO3fwlrgEb22\",\"secureCode\":\"VTIDC123\",\"deviceSerial\":\"518395999\",\"mainStream\":\"rtsp://117.0.33.37:32509/ch1/main\",\"subStream\":\"rtsp://117.0.33.37:32509/ch1/sub\"}";
-//	encrypt_string(input_str);
+int VTIDC_start_rtmp_stream() {
+	int retry_count = 3;
+	int ret = -1;
 
-	int ret = 0;
-	//http post - authen server to get rtmp url
-	std::string rtmp_url = VTIDC_get_rtmp_link();
+	while ((retry_count > 0) && (ret != 0)) {
+		//http post - authen server to get rtmp url
+		VTIDC_rtmp_url = VTIDC_get_rtmp_link();
 
-	//send rtmp stream to rtmp url
-	if ((reInitRTMP == HI_TRUE) && (rtmp_url != "")) {
-		ret = rtmp_init_client_rtmp_url(rtmp_url);
-		if (ret != 0) {
-			//RTMP init failed - RTMP not sending
-			reInitRTMP = HI_TRUE;
+		//send rtmp stream to rtmp url
+		if ((reInitRTMP == HI_TRUE) && (VTIDC_rtmp_url != "")) {
+			ret = rtmp_init_client_rtmp_url(VTIDC_rtmp_url);
+			if (ret != 0) {
+				//RTMP init failed - RTMP not sending
+				reInitRTMP = HI_TRUE;
+			}
+			else {
+				//RTMP is sending
+				reInitRTMP = HI_FALSE;
+			}
 		}
-		else {
-			//RTMP is sending
-			reInitRTMP = HI_FALSE;
-		}
+		sleep(1);
 	}
+
+	if (VTIDC_rtmp_url != "") {
+		has_server_key = 1;
+	}
+
 	return ret;
 }
 
-int Viettel_IDC_stop_rtmp_stream() {
+int VTIDC_stop_rtmp_stream() {
 	reInitRTMP = HI_TRUE;
 	sleep(1);
 	rtmp_destroy_client();
@@ -4893,11 +4909,11 @@ int main(int argc, char *argv[])
         	break;
         case 'V':
 #ifdef USE_VIETTEL_IDC
-        	s32Ret = Viettel_IDC_start_rtmp_stream();
+        	s32Ret = VTIDC_start_rtmp_stream();
             printf("please press twice ENTER to exit this sample\n");
             getchar();
             getchar();
-            Viettel_IDC_stop_rtmp_stream();
+            VTIDC_stop_rtmp_stream();
 #endif //USE_VIETTEL_IDC
         	break;
         default:

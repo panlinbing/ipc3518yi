@@ -134,8 +134,8 @@ int connect_HC();
 int disconnect_HC();
 
 #ifdef USE_VIETTEL_IDC
-int Viettel_IDC_start_rtmp_stream();
-int Viettel_IDC_stop_rtmp_stream();
+int VTIDC_start_rtmp_stream();
+int VTIDC_stop_rtmp_stream();
 #endif //USE_VIETTEL_IDC
 
 #endif

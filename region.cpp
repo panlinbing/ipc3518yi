@@ -36,13 +36,23 @@
 
 #define LOGO_POS_720P_X			16
 #define LOGO_POS_720P_Y			16
+#ifdef USE_VIETTEL_IDC
+#define LOGO_SIZE_720P_WIDTH	250
+#define LOGO_SIZE_720P_HEIGHT	52
+#else
 #define LOGO_SIZE_720P_WIDTH	180
 #define LOGO_SIZE_720P_HEIGHT	60
+#endif //USE_VIETTEL_IDC
 
 #define LOGO_POS_VGA_X			8
 #define LOGO_POS_VGA_Y			8
+#ifdef USE_VIETTEL_IDC
+#define LOGO_SIZE_VGA_WIDTH		126
+#define LOGO_SIZE_VGA_HEIGHT	26
+#else
 #define LOGO_SIZE_VGA_WIDTH		90
 #define LOGO_SIZE_VGA_HEIGHT	30
+#endif //USE_VIETTEL_IDC
 
 #define NUMBER_POS_YEAR	0
 #define NUMBER_POS_MON	5
@@ -511,7 +521,6 @@ int create_time_region(VENC_GRP VencGrpStart, HI_S32 grpcnt, PIC_SIZE_E *enSize)
     /*********************************************
      step 6: logo
     *********************************************/
-#ifndef USE_VIETTEL_IDC
     for (i = 0; i < grpcnt; i++)
     {
     	stRgnAttrLogo[i].enType = OVERLAY_RGN;
@@ -580,10 +589,18 @@ int create_time_region(VENC_GRP VencGrpStart, HI_S32 grpcnt, PIC_SIZE_E *enSize)
         }
 
         if (enSize[i] == PIC_HD720) {
+#ifdef USE_VIETTEL_IDC
+        	s32Ret = SAMPLE_RGN_LoadBmp("logo_250x51.bmp", &stBitmap);
+#else
         	s32Ret = SAMPLE_RGN_LoadBmp("logo_180x60.bmp", &stBitmap);
+#endif //USE_VIETTEL_IDC
         }
         else {
+#ifdef USE_VIETTEL_IDC
+        	s32Ret = SAMPLE_RGN_LoadBmp("logo_125x25.bmp", &stBitmap);
+#else
         	s32Ret = SAMPLE_RGN_LoadBmp("logo_90x30.bmp", &stBitmap);
+#endif //USE_VIETTEL_IDC
         }
         if(HI_SUCCESS != s32Ret)
         {
@@ -604,7 +621,6 @@ int create_time_region(VENC_GRP VencGrpStart, HI_S32 grpcnt, PIC_SIZE_E *enSize)
             stBitmap.pData = NULL;
         }
     }
-#endif //USE_VIETTEL_IDC
 
 ERR_MALLOC:
     return s32Ret;

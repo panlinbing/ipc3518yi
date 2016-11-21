@@ -19,7 +19,7 @@
 
 using namespace std;
 
-static srs_rtmp_t rtmp;
+static srs_rtmp_t rtmp = NULL;
 static bool rtmp_ready = 0;
 pthread_mutex_t lock;
 
@@ -71,8 +71,8 @@ int rtmp_init_client_streamname(char* client) {
 //	string url = "rtmp://112.197.10.222:1935/lumi_test/tokenTest123456789";
 //	string url = "rtmp://112.197.10.222:1935/lumi_test/" + key;
 //Lumi
-//	string url = "rtmp://192.168.100.12:1935/live/tokenTest123456789";
-	string url = "rtmp://192.168.1.30:1935/live/stream" + key;
+//	string url = "rtmp://192.168.1.30:1935/live/stream" + key;
+	string url = "rtmp://192.168.43.102:1935/live/stream" + key;
 //May ao
 //	string url = "rtmp://192.168.1.10:1935/live/stream";
 //Forward port
@@ -96,11 +96,14 @@ int rtmp_init_client_rtmp_url(std::string rtmp_url) {
 }
 
 int rtmp_send_h264_raw_stream(char* data, int size, u_int32_t dts, u_int32_t pts) {
-	//Check if rtmp client has inited
-	if ((rtmp == NULL) || (rtmp_ready == 0))
-		return -1;
-
+	//Lock before do anything
 	pthread_mutex_lock(&lock);
+	//Check if rtmp client has inited
+	if ((rtmp == NULL) || (rtmp_ready == 0)) {
+		pthread_mutex_unlock(&lock);
+		return -1;
+	}
+
     // send out the h264 packet over RTMP
     int ret = srs_h264_write_raw_frames(rtmp, data, size, dts, pts);
     if (ret != 0) {
@@ -113,12 +116,12 @@ int rtmp_send_h264_raw_stream(char* data, int size, u_int32_t dts, u_int32_t pts
         } else {
             srs_human_trace("send h264 raw data failed. ret=%d", ret);
             rtmp_ready = 0;
+            pthread_mutex_unlock(&lock);
             return -2;
         }
     }
 //    srs_human_trace("write video frame success buf 0x%p, size = %d", data, size);
     pthread_mutex_unlock(&lock);
-
 	return 0;
 }
 
@@ -160,9 +163,13 @@ int rtmp_send_h264_raw_stream(char* data, int size, u_int32_t dts, u_int32_t pts
 *               1 = Stereo sound
 ******************************************************************************/
 int rtmp_send_audio_raw_stream(char* data, int size, u_int32_t timestamp) {
+	//Lock before do anything
+	pthread_mutex_lock(&lock);
 	//Check if rtmp client has inited
-	if (rtmp == NULL)
+	if ((rtmp == NULL) || (rtmp_ready == 0)) {
+		pthread_mutex_unlock(&lock);
 		return -1;
+	}
 
     // 0 = Linear PCM, platform endian
     // 1 = ADPCM
@@ -181,21 +188,23 @@ int rtmp_send_audio_raw_stream(char* data, int size, u_int32_t timestamp) {
     // 1 = Stereo sound
     char sound_type = 0;
 
-    pthread_mutex_lock(&lock);
     if (srs_audio_write_raw_frame(rtmp, sound_format, sound_rate, sound_size,
     		sound_type, data, size, timestamp) != 0) {
         srs_human_trace("send audio raw data failed.");
-        return -1;
+        rtmp_ready = 0;
+        pthread_mutex_unlock(&lock);
+        return -2;
     }
 //    srs_human_trace("write audio frame success buf 0x%p, size = %d", data, size);
     pthread_mutex_unlock(&lock);
-
 	return 0;
 }
 
 int rtmp_destroy_client() {
-	if ((rtmp != NULL) && (rtmp_ready == 1))
+	if ((rtmp != NULL) && (rtmp_ready == 1)) {
 		srs_rtmp_destroy(rtmp);
+		rtmp = NULL;
+	}
 	pthread_mutex_destroy(&lock);
 	rtmp_ready = 0;
 
