@@ -4312,117 +4312,84 @@ int get_camera_info() {
 /******************************************************************************
 * group: connect HC - manager request
 ******************************************************************************/
+#ifdef USE_CONNECT_HC
 //static ClientSock_p pClientSocket       = NULL;
 #define HC_ADDRESS			"192.168.1.8"
-#define HC_ADDRESS_POSTFIX	"7"
+#define HC_ADDRESS_POSTFIX	"30"
 #define HC_PORT				1235
 static ClientSock_p	pClientSocket	= NULL;
 static SClient_p	pSClient		= NULL;
 
-int check_camID(Json::Value& root) {
-	std::string read_camid = root["camid"].asString();
+int HC_check_dev_type_and_camid(Json::Value& root) {
+	std::string read_dev_type = root[ROOT_MEMBER_TYPE].asString();
+	if (read_dev_type.compare(ROOT_MEMBER_TYPE_CAM) != 0)
+		return ERR_WRONG_DEVICE_TYPE;
+	std::string read_camid = root[ROOT_MEMBER_MAC].asString();
 	if (read_camid.compare(camid) != 0)
 		return ERR_WRONG_CAMERA_ID;
 	return 0;
 }
 
-int HC_reply_command_fail_wrongcamid() {
-    Json::Value root;
-    root["camid"] = camid;
-    root["ret"] = RET_WRONG_CAM_ID;
-    JsonCommand_p pJsonCommand = new JsonCommand();
-    pJsonCommand->SetCmdClass(CMD_CLASS_CAM);
-    pJsonCommand->SetCommand(CMD_REP);
-    pJsonCommand->SetJsonObject(root);
+int HC_rep_infos(Json::Value& val, std::string ret) {
+	val[VAL_MEMBER_RET] = ret;
+	Json::Value rep;
+    rep[ROOT_MEMBER_TYPE] = ROOT_MEMBER_TYPE_CAM;
+    rep[ROOT_MEMBER_MAC] = camid;
+    rep[ROOT_MEMBER_VAL] = val;
 
-    return pSClient->sendJsonCommand(pJsonCommand);
-}
-
-int HC_rep_infos(Json::Value& rep) {
-	rep["camid"] = camid;
-	rep["ret"] = "0";
 	JsonCommand_p pJsonCommand = new JsonCommand();
-	pJsonCommand->SetCmdClass(CMD_CLASS_CAM);
-	pJsonCommand->SetCommand(CMD_REP);
+	pJsonCommand->SetCmdClass(CMD_CLASS_DEV);
+	pJsonCommand->SetCommand(CMD_STT);
 	pJsonCommand->SetJsonObject(rep);
-
 	return pSClient->sendJsonCommand(pJsonCommand);
 }
 
-int HC_res_cmd(const char *ret) {
-	Json::Value res;
-	res["camid"] = camid;
-	res["res"] = ret;
-	JsonCommand_p pJsonCommand = new JsonCommand();
-	pJsonCommand->SetCmdClass(CMD_CLASS_CAM);
-	pJsonCommand->SetCommand(CMD_REP);
-	pJsonCommand->SetJsonObject(res);
+int HC_reply_command_fail_wrong_info(Json::Value& root, int ret) {
+    Json::Value val;
+    std::string act_str = root[ROOT_MEMBER_VAL][VAL_MEMBER_ACT].asString();
+    if (act_str == "") act_str = "0";
+    val[VAL_MEMBER_STATUS] = act_str;
+    if (ret == ERR_WRONG_CAMERA_ID) {
+    	return HC_rep_infos(val, RET_WRONG_CAM_ID);
+    }
+    else {
+    	return HC_rep_infos(val, RET_WRONG_DEV_TYPE);
+    }
+}
 
-	return pSClient->sendJsonCommand(pJsonCommand);
+int HC_rep_cmd(std::string status, std::string ret) {
+	Json::Value val;
+	val[VAL_MEMBER_STATUS] = status;
+
+	return HC_rep_infos(val, ret);
 }
 
 int HC_command_get(Json::Value& root) {
-	Json::Value rep;
-	int i;
-	const Json::Value& infos = root["info"];
-	for (i = 0; i < infos.size(); ++i) {
-		std::string info = infos[i].asString();
-		if (info.compare(INFO_CAM_ID) == 0)
-			rep[INFO_CAM_ID] = camid;
-		else if (info.compare(INFO_CAM_NAME) == 0)
-			rep[INFO_CAM_NAME] = user;
-		else if (info.compare(INFO_CAM_IP) == 0)
-			rep[INFO_CAM_IP] = camip;
-		else if (info.compare(INFO_CAM_PORT) == 0)
-			rep[INFO_CAM_PORT] = port;
-		else if (info.compare(INFO_CAM_TYPE) == 0)
-			rep[INFO_CAM_TYPE] = CAM_TYPE_ANT_YI;
-	}
-	return HC_rep_infos(rep);
+	Json::Value val;
+	val[VAL_MEMBER_CAM_ID] = camid;
+	val[VAL_MEMBER_CAM_NAME] = user;
+	val[VAL_MEMBER_CAM_IP] = camip;
+	val[VAL_MEMBER_CAM_PORT] = port;
+	val[VAL_MEMBER_CAM_MODEL] = VAL_MEMBER_CAM_MODEL_YI;
+	val[VAL_MEMBER_STATUS] = "0";
+	return HC_rep_infos(val, RET_SUCCESS);
 }
 
-int HC_command_edit(Json::Value& root) {
-	Json::Value rep;
-	if (root.isMember(INFO_CAM_NAME)) {
-		std::string name = root[INFO_CAM_NAME].asString();
-		write_info(FILE_USER, name.c_str(), name.length());
-		rep[INFO_CAM_NAME] = root[INFO_CAM_NAME];
-	}
-	if (root.isMember(INFO_CAM_IP)) {
-		std::string camip = root[INFO_CAM_IP].asString();
-		write_info(FILE_IP, camip.c_str(), camip.length());
-		rep[INFO_CAM_IP] = root[INFO_CAM_IP];
-	}
-	if (root.isMember(INFO_CAM_PORT)) {
-		std::string port = root[INFO_CAM_PORT].asString();
-		write_info(FILE_PORT, port.c_str(), port.length());
-		rep[INFO_CAM_PORT] = root[INFO_CAM_PORT];
-	}
-	return HC_rep_infos(rep);;
+int HC_command_reboot(Json::Value& val, std::string act_str) {
+	HC_rep_cmd(act_str, RET_SUCCESS);
+	return 0;
 }
 
-int HC_command_reboot() {
-    Json::Value rep;
-    rep["camid"] = camid;
-    rep["res"] = "0";
-	JsonCommand_p pJsonCommand = new JsonCommand();
-	pJsonCommand->SetCmdClass(CMD_CLASS_CAM);
-	pJsonCommand->SetCommand(CMD_REP);
-	pJsonCommand->SetJsonObject(rep);
-
-	return pSClient->sendJsonCommand(pJsonCommand);
-}
-
-int HC_command_start_RTMP(Json::Value& root) {
+int HC_command_start_RTMP(Json::Value& val, std::string act_str) {
 	int ret = 0;
-	std::string ip = root["ip"].asString();
-	std::string port = root["port"].asString();
-	std::string application = root["application"].asString();
-	std::string stream =root["stream"].asString();
+	std::string ip = val[VAL_MEMBER_RTMP_SERVER].asString();
+	std::string port = val[VAL_MEMBER_RTMP_PORT].asString();
+	std::string application = val[VAL_MEMBER_RTMP_APP].asString();
+	std::string stream =val[VAL_MEMBER_RTMP_STREAM].asString();
 
 	if ((ip == "") || (port == "") || (application == "") || (stream == "")) {
-		HC_res_cmd("3");
-		return 3;
+		HC_rep_cmd(act_str, RET_SET_START_RTMP_FAILED);
+		return 4;
 	}
 
 	if ((reInitRTMP == HI_TRUE)) {
@@ -4430,77 +4397,119 @@ int HC_command_start_RTMP(Json::Value& root) {
 		if (ret != 0) {
 			//RTMP init failed - RTMP not sending
 			reInitRTMP = HI_TRUE;
-			HC_res_cmd("3");
+			HC_rep_cmd(act_str, RET_SET_START_RTMP_FAILED);
 		}
 		else {
 			//RTMP is sending
 			reInitRTMP = HI_FALSE;
-			HC_res_cmd("0");
+			HC_rep_cmd(act_str, RET_SUCCESS);
 		}
 	}
 	return ret;
 }
 
-int HC_command_stop_RTMP(Json::Value& root) {
+int HC_command_stop_RTMP(Json::Value& val, std::string act_str) {
 	reInitRTMP = HI_TRUE;
 	sleep(1);
 	rtmp_destroy_client();
-	HC_res_cmd("0");
+	HC_rep_cmd(act_str, RET_SUCCESS);
 	return 0;
 }
 
-int HC_command_cmd(Json::Value& root) {
+int HC_command_set(Json::Value& root) {
 	int ret = 0;
-	std::string cmd = root["cmd"].asString();
-	if (cmd.compare(CMD_REBOOT) == 0) {
-		ret = HC_command_reboot();
-		system("reboot");
-		system("reboot");
-	} else if (cmd.compare(CMD_START_RTMP) == 0) {
-		ret = HC_command_start_RTMP(root);
-	} else if (cmd.compare(CMD_STOP_RTMP) == 0) {
-		ret = HC_command_stop_RTMP(root);
+	Json::Value val = root[ROOT_MEMBER_VAL];
+	std::string act_str = val["act"].asString();
+	int act = strtol(act_str.c_str(), NULL, 10);
+	std::string val_value;
+
+	switch (act) {
+		case 1:
+			//set cam name
+			val_value = val[VAL_MEMBER_CAM_NAME].asString();
+			if (val_value != "") {
+				ret = write_info(FILE_USER, val_value.c_str(), val_value.length());
+				if (!ret) HC_rep_cmd(act_str, RET_SUCCESS);
+			}
+			if ((val_value == "") || ret)
+				HC_rep_cmd(act_str, RET_SET_NAME_FAILED);
+			break;
+		case 2:
+			//set cam ip
+			val_value = val[VAL_MEMBER_CAM_IP].asString();
+			if (val_value != "") {
+				ret = write_info(FILE_IP, val_value.c_str(), val_value.length());
+				if (!ret) HC_rep_cmd(act_str, RET_SUCCESS);
+			}
+			if ((val_value == "") || ret)
+				HC_rep_cmd(act_str, RET_SET_IP_FAILED);
+			break;
+		case 3:
+			//set cam port
+			val_value = val[VAL_MEMBER_CAM_PORT].asString();
+			if (val_value != "") {
+				ret = write_info(FILE_PORT, val_value.c_str(), val_value.length());
+				if (!ret) HC_rep_cmd(act_str, RET_SUCCESS);
+			}
+			if ((val_value == "") || ret)
+				HC_rep_cmd(act_str, RET_SET_PORT_FAILED);
+			break;
+		case 4:
+			//start rtmp
+			ret = HC_command_start_RTMP(val, act_str);
+			break;
+		case 5:
+			//stop rtmp
+			ret = HC_command_stop_RTMP(val, act_str);
+			break;
+		case 6:
+			//reboot
+			ret = HC_command_reboot(val, act_str);
+//			system("reboot");
+//			system("reboot");
+			exit(0);
+			break;
 	}
+
 	return ret;
 }
 
 int process_HC_command(JsonCommand_p pJsoncommand) {
+	if (!pJsoncommand->IsJsonAvailable())
+		return -1;
+
 	int ret = 0;
 	std::string strCmdClass =  pJsoncommand->GetCmdClass();
 	std::string strCmd = pJsoncommand->GetCommand();
 	Json::Value root = pJsoncommand->GetJsonOjbect();
 
-	if (strCmdClass.compare(CMD_CLASS_CAM) != 0)
-		return 0;
-
 	switch (pSClient->getState()) {
 		case SClient::IDLE:
 			break;
 		case SClient::WAIT_AUTHEN:
-			if (strCmd.compare(CMD_AUTH) != 0) {
+			if (strCmdClass.compare(CMD_CLASS_AUTH) || strCmd.compare(CMD_RES)) {
 				return ERR_COMMAND_NOT_ALLOWED;
 			}
 			else {
-				Json::Value root = pJsoncommand->GetJsonOjbect();
 				std::string ret = root["ret"].asString();
-				if (ret.compare(RET_AUTHEN_SUCCESS) == 0) {
+				if (ret.compare(RET_SUCCESS) == 0) {
 					pSClient->setState(SClient::WAIT_CMD);
 				}
 			}
 			break;
 		case SClient::WAIT_CMD:
-			ret = check_camID(root);
-			if (ret == ERR_WRONG_CAMERA_ID) {
-				HC_reply_command_fail_wrongcamid();
-				return ERR_WRONG_CAMERA_ID;
+			if (strCmdClass.compare(CMD_CLASS_DEV))
+				return ERR_COMMAND_NOT_ALLOWED;
+			ret = HC_check_dev_type_and_camid(root);
+			if (ret) {
+				HC_reply_command_fail_wrong_info(root, ret);
+				return ret;
 			}
 
 			if (strCmd.compare(CMD_GET) == 0)
 				ret = HC_command_get(root);
-			else if (strCmd.compare(CMD_EDIT) == 0)
-				ret = HC_command_edit(root);
-			else if (strCmd.compare(CMD_CMD) == 0)
-				ret = HC_command_cmd(root);
+			else if (strCmd.compare(CMD_SET) == 0)
+				ret = HC_command_set(root);
 			else
 				return ERR_INVALID_COMMAND;
 			break;
@@ -4564,7 +4573,7 @@ int connect_HC() {
 		return -1;
 	}
 
-	pSClient->SendAuthenComand(CAM_TYPE_ANT_YI, camid, user, port);
+	pSClient->SendAuthenComand(ROOT_MEMBER_TYPE_CAM, camid);
 	pthread_create(&thread_read_HC_data, 0, thread_read_HC_data_func, NULL);
 
 	return 0;
@@ -4583,6 +4592,7 @@ int disconnect_HC() {
 	}
 	return 0;
 }
+#endif //USE_CONNECT_HC
 
 /******************************************************************************
 * group: Viettel IDC - HTTP POST - RTMP

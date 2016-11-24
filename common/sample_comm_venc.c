@@ -28,6 +28,7 @@ extern "C"{
 #include <signal.h>
 
 #include "sample_comm.h"
+#include "../config.h"
  
 const HI_U8 g_SOI[2] = {0xFF, 0xD8};
 const HI_U8 g_EOI[2] = {0xFF, 0xD9};
@@ -354,7 +355,11 @@ HI_S32 SAMPLE_COMM_VENC_Start(VENC_GRP VencGrp,VENC_CHN VencChn, PAYLOAD_TYPE_E 
 
                 stH264Cbr.u32Gop            = 40;
                 stH264Cbr.u32StatTime       = 1; /* stream rate statics time(s) */
+#ifdef USE_CAM_20_FPS
                 stH264Cbr.u32ViFrmRate      = 20;/* input (vi) frame rate */
+#else //30FPS
+                stH264Cbr.u32ViFrmRate      = 30;/* input (vi) frame rate */
+#endif //USE_CAM_20_FPS
                 stH264Cbr.fr32TargetFrmRate = 20;/* target frame rate */
 
                 switch (enSize)
@@ -410,7 +415,11 @@ HI_S32 SAMPLE_COMM_VENC_Start(VENC_GRP VencGrp,VENC_CHN VencChn, PAYLOAD_TYPE_E 
                 stH264Vbr.u32Gop = 40;
                 stH264Vbr.u32StatTime = 1;
                 stH264Vbr.u32ViFrmRate = 20;
+#ifdef USE_CAM_20_FPS
                 stH264Vbr.fr32TargetFrmRate = 20;
+#else //30FPS
+                stH264Vbr.fr32TargetFrmRate = 30;
+#endif //USE_CAM_20_FPS
                 stH264Vbr.u32MinQp = 24;
                 stH264Vbr.u32MaxQp = 40;
 

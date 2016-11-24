@@ -27,6 +27,7 @@ extern "C"{
 #include <signal.h>
 
 #include "sample_comm.h"
+#include "../config.h"
 
 
 VI_DEV_ATTR_S DEV_ATTR_BT656D1_1MUX =
@@ -950,8 +951,13 @@ HI_S32 SAMPLE_COMM_VI_StartChn(VI_CHN ViChn, RECT_S *pstCapRect, SIZE_S *pstTarS
     }
 
     stChnAttr.bChromaResample = HI_FALSE;
+#ifdef USE_CAM_20_FPS
     stChnAttr.s32SrcFrameRate = 20;
     stChnAttr.s32FrameRate = 20;
+#else //30FPS
+    stChnAttr.s32SrcFrameRate = 30;
+    stChnAttr.s32FrameRate = 30;
+#endif //stH264Vbr.fr32TargetFrmRate = 30;
 
     s32Ret = HI_MPI_VI_SetChnAttr(ViChn, &stChnAttr);
     if (s32Ret != HI_SUCCESS)

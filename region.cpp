@@ -590,14 +590,14 @@ int create_time_region(VENC_GRP VencGrpStart, HI_S32 grpcnt, PIC_SIZE_E *enSize)
 
         if (enSize[i] == PIC_HD720) {
 #ifdef USE_VIETTEL_IDC
-        	s32Ret = SAMPLE_RGN_LoadBmp("logo_250x51.bmp", &stBitmap);
+        	s32Ret = SAMPLE_RGN_LoadBmp("logo_250x52.bmp", &stBitmap);
 #else
         	s32Ret = SAMPLE_RGN_LoadBmp("logo_180x60.bmp", &stBitmap);
 #endif //USE_VIETTEL_IDC
         }
         else {
 #ifdef USE_VIETTEL_IDC
-        	s32Ret = SAMPLE_RGN_LoadBmp("logo_125x25.bmp", &stBitmap);
+        	s32Ret = SAMPLE_RGN_LoadBmp("logo_126x26.bmp", &stBitmap);
 #else
         	s32Ret = SAMPLE_RGN_LoadBmp("logo_90x30.bmp", &stBitmap);
 #endif //USE_VIETTEL_IDC

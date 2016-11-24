@@ -142,15 +142,13 @@ SClient::Close() {
 }
 
 bool
-SClient::SendAuthenComand(std::string camType, std::string camid, std::string camname, std::string port) {
+SClient::SendAuthenComand(std::string type, std::string camid) {
     Json::Value root;
-    root["type"] = camType;
-    root["camid"] = camid;
-    root["name"] = camname;
-    root["port"] = port;
+    root[ROOT_MEMBER_TYPE] = type;
+    root[ROOT_MEMBER_MAC] = camid;
     JsonCommand_p pJsonCommand = new JsonCommand();
-    pJsonCommand->SetCmdClass("auth");
-    pJsonCommand->SetCommand("req");
+    pJsonCommand->SetCmdClass(CMD_CLASS_AUTH);
+    pJsonCommand->SetCommand(CMD_REQ);
     pJsonCommand->SetJsonObject(root);
 
     sendJsonCommand(pJsonCommand);

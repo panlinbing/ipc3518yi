@@ -130,8 +130,11 @@ int sync_time();
 //int destroy_time_region(VENC_GRP VencGrpStart, HI_S32 grpcnt);
 int check_isp_register();
 void * connect_server_authen_send_detect_command(void* pParam);
+
+#ifdef USE_CONNECT_HC
 int connect_HC();
 int disconnect_HC();
+#endif //USE_CONNECT_HC
 
 #ifdef USE_VIETTEL_IDC
 int VTIDC_start_rtmp_stream();

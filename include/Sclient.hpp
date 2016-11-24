@@ -23,26 +23,35 @@ const std::string DE2 = std::string("=");
 #define SPACE		(' ')
 #define ENDLN		('\n')
 
-#define CMD_CLASS_CAM		"cam"
+#define CMD_CLASS_AUTH		"auth"
+#define CMD_CLASS_DEV		"dev"
 #define CMD_CLASS_KALIVE	"kalive"
 
-#define CAM_TYPE_ANT_YI		"ant-yi"
-#define CMD_AUTH			"auth"
-#define CMD_GET				"get"
-#define CMD_EDIT			"edit"
-#define CMD_REP				"rep"
-#define CMD_CMD				"cmd"
-#define CMD_REBOOT			"reboot"
-#define CMD_START_RTMP		"start_RTMP"
-#define CMD_STOP_RTMP		"stop_RTMP"
-#define CMD_RES				"res"
 #define CMD_REQ				"req"
+#define CMD_RES				"res"
+#define CMD_GET				"get"
+#define CMD_SET				"set"
+#define CMD_STT				"stt"
 
-#define INFO_CAM_ID				"camid"
-#define INFO_CAM_NAME			"name"
-#define INFO_CAM_IP				"camip"
-#define INFO_CAM_PORT			"port"
-#define INFO_CAM_TYPE			"type"
+#define ROOT_MEMBER_MAC				"mac"
+#define ROOT_MEMBER_TYPE			"type"
+#define ROOT_MEMBER_TYPE_CAM		"cam"
+#define ROOT_MEMBER_VAL				"val"
+
+#define VAL_MEMBER_ACT				"act"
+#define VAL_MEMBER_STATUS			"status"
+#define VAL_MEMBER_CAM_ID			"camid"
+#define VAL_MEMBER_CAM_NAME			"name"
+#define VAL_MEMBER_CAM_IP			"camip"
+#define VAL_MEMBER_CAM_PORT			"port"
+#define VAL_MEMBER_CAM_MODEL		"model"
+#define VAL_MEMBER_CAM_MODEL_YI		"ant-yi"
+#define VAL_MEMBER_RET				"ret"
+
+#define VAL_MEMBER_RTMP_SERVER		"server_addr"
+#define VAL_MEMBER_RTMP_PORT		"server_port"
+#define VAL_MEMBER_RTMP_APP			"application"
+#define VAL_MEMBER_RTMP_STREAM		"stream"
 
 #define ERR_HAS_SETUP_ALREADY		-1
 #define ERR_MISS_PARAMETER			-2
@@ -54,9 +63,17 @@ const std::string DE2 = std::string("=");
 #define ERR_WRONG_CAMERA_ID			-21
 #define ERR_WRONG_CAMERA_USER		-22
 #define ERR_WRONG_CAMERA_PASS		-23
+#define ERR_WRONG_DEVICE_TYPE		-24
 
-#define RET_AUTHEN_SUCCESS		"0"
-#define RET_WRONG_CAM_ID		"2"
+#define RET_SUCCESS					"0"
+#define RET_SET_NAME_FAILED			"1"
+#define RET_SET_IP_FAILED			"2"
+#define RET_SET_PORT_FAILED			"3"
+#define RET_SET_START_RTMP_FAILED	"4"
+#define RET_SET_STOP_RTMP_FAILED	"5"
+#define RET_SET_REBOOT_FAILED		"6"
+#define RET_WRONG_DEV_TYPE			"7"
+#define RET_WRONG_CAM_ID			"8"
 
 class SClient {
 public:
@@ -89,7 +106,7 @@ public:
 	bool Connect();
 	bool Close();
 
-	bool SendAuthenComand(std::string camType, std::string camid, std::string camname, std::string port);
+	bool SendAuthenComand(std::string type, std::string camid);
 
 private:
 	std::string mRemainData;
