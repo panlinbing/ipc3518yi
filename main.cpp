@@ -60,7 +60,8 @@ using namespace cv;
 
 //#define nalu_sent_len        14000
 //#define nalu_sent_len        1400
-#define nalu_sent_len        1300
+//#define nalu_sent_len        1300
+#define nalu_sent_len        1305
 #define RTP_H264                    96
 #define MAX_CHAN                 8
 #define RTP_AUDIO              97
@@ -2229,23 +2230,31 @@ HI_S32 VENC_Sent(char *buffer, int buflen, int channel)
 
 		rtp_hdr->timestamp=htonl(g_rtspClients[is].tsvid);
 
+		char NALU = buffer[4];
+
 		if(nAvFrmLen<=nalu_sent_len)
 		{
 			rtp_hdr->marker=1;
-			rtp_hdr->seq_no     = htons(g_rtspClients[is].seqnum++);
-//			nalu_hdr =(NALU_HEADER*)&sendbuf_venc_sent[12];
-			nalu_hdr =(NALU_HEADER*)&sendbuf_venc_sent[12 + rtp_offset];
-			nalu_hdr->F=0;
-			nalu_hdr->NRI=  nIsIFrm;
-			nalu_hdr->TYPE=  nNaluType;
+//			rtp_hdr->seq_no     = htons(g_rtspClients[is].seqnum++);
+////			nalu_hdr =(NALU_HEADER*)&sendbuf_venc_sent[12];
+//			nalu_hdr =(NALU_HEADER*)&sendbuf_venc_sent[12 + rtp_offset];
+//			nalu_hdr->F=0;
+//			nalu_hdr->NRI=  3;
+//			nalu_hdr->TYPE=  1;
 
 //			nalu_payload=&sendbuf_venc_sent[13];
 			nalu_payload=&sendbuf_venc_sent[13 + rtp_offset];
-			memcpy(nalu_payload,buffer,nAvFrmLen);
+			memcpy(nalu_payload,buffer+5,nAvFrmLen-5);
 //			g_rtspClients[is].tsvid = g_rtspClients[is].tsvid+timestamp_increse;
 
+//			sendbuf_venc_sent[12 + rtp_offset] = buffer[4];
+//			*(char*)nalu_hdr = NALU;
+
+			//NAL header
+			sendbuf_venc_sent[12 + rtp_offset] = NALU;
+
 //			rtp_hdr->timestamp=htonl(g_rtspClients[is].tsvid);
-			bytes=nAvFrmLen + 13;
+			bytes=nAvFrmLen + 13 - 5;
 //			sendto(udpfd_video, sendbuf_venc_sent, bytes, 0, (struct sockaddr *)&server,sizeof(server));
 
 			if (g_rtspClients[is].streamMode == RTP_UDP) {
@@ -2277,24 +2286,28 @@ HI_S32 VENC_Sent(char *buffer, int buflen, int channel)
 				if(t==0)
 				{
 					rtp_hdr->marker=0;
-//					fu_ind =(FU_INDICATOR*)&sendbuf_venc_sent[12];
-					fu_ind =(FU_INDICATOR*)&sendbuf_venc_sent[12 + rtp_offset];
-					fu_ind->F= 0;
-					fu_ind->NRI= nIsIFrm;
-					fu_ind->TYPE=28;
-
-//					fu_hdr =(FU_HEADER*)&sendbuf_venc_sent[13];
-					fu_hdr =(FU_HEADER*)&sendbuf_venc_sent[13 + rtp_offset];
-					fu_hdr->E=0;
-					fu_hdr->R=0;
-					fu_hdr->S=1;
-					fu_hdr->TYPE=nNaluType;
+////					fu_ind =(FU_INDICATOR*)&sendbuf_venc_sent[12];
+//					fu_ind =(FU_INDICATOR*)&sendbuf_venc_sent[12 + rtp_offset];
+//					fu_ind->F= 0;
+//					fu_ind->NRI= 3;
+//					fu_ind->TYPE=28;
+//
+////					fu_hdr =(FU_HEADER*)&sendbuf_venc_sent[13];
+//					fu_hdr =(FU_HEADER*)&sendbuf_venc_sent[13 + rtp_offset];
+//					fu_hdr->E=0;
+//					fu_hdr->R=0;
+//					fu_hdr->S=1;
+//					fu_hdr->TYPE=1;
 
 //					nalu_payload=&sendbuf_venc_sent[14];
 					nalu_payload=&sendbuf_venc_sent[14 + rtp_offset];
-					memcpy(nalu_payload,buffer,nalu_sent_len);
+					memcpy(nalu_payload,buffer+5,nalu_sent_len-5);
 
-					bytes=nalu_sent_len+14;
+					//FU IND and FU header
+					sendbuf_venc_sent[12 + rtp_offset] = (NALU & 0x60) | 0x1C;
+					sendbuf_venc_sent[13 + rtp_offset] = (NALU & 0x1F) | 0x80;
+
+					bytes=nalu_sent_len+14 - 5;
 //					sendto( udpfd_video, sendbuf_venc_sent, bytes, 0, (struct sockaddr *)&server,sizeof(server));
 
 					if (g_rtspClients[is].streamMode == RTP_UDP) {
@@ -2306,7 +2319,6 @@ HI_S32 VENC_Sent(char *buffer, int buflen, int channel)
 //						printf("send seq = %d - %d bytes - 0x%2x-0x%2x-0x%2x-0x%2x-0x%2x-0x%2x\n", g_rtspClients[is].seqnum, bytes,
 //								sendbuf_venc_sent[0], sendbuf_venc_sent[1], sendbuf_venc_sent[2], sendbuf_venc_sent[3], sendbuf_venc_sent[4], sendbuf_venc_sent[5]);
 					}
-
 					t++;
 
 				}
@@ -2315,20 +2327,25 @@ HI_S32 VENC_Sent(char *buffer, int buflen, int channel)
 
 					rtp_hdr->marker=1;
 //					fu_ind =(FU_INDICATOR*)&sendbuf_venc_sent[12];
-					fu_ind =(FU_INDICATOR*)&sendbuf_venc_sent[12 + rtp_offset];
-					fu_ind->F= 0 ;
-					fu_ind->NRI= nIsIFrm ;
-					fu_ind->TYPE=28;
-
-					fu_hdr =(FU_HEADER*)&sendbuf_venc_sent[13];
-					fu_hdr =(FU_HEADER*)&sendbuf_venc_sent[13 + rtp_offset];
-					fu_hdr->R=0;
-					fu_hdr->S=0;
-					fu_hdr->TYPE= nNaluType;
-					fu_hdr->E=1;
+//					fu_ind =(FU_INDICATOR*)&sendbuf_venc_sent[12 + rtp_offset];
+//					fu_ind->F= 0 ;
+//					fu_ind->NRI= 3 ;
+//					fu_ind->TYPE=28;
+//
+//					fu_hdr =(FU_HEADER*)&sendbuf_venc_sent[13];
+//					fu_hdr =(FU_HEADER*)&sendbuf_venc_sent[13 + rtp_offset];
+//					fu_hdr->R=0;
+//					fu_hdr->S=0;
+//					fu_hdr->TYPE= 1;
+//					fu_hdr->E=1;
 //					nalu_payload=&sendbuf_venc_sent[14];
 					nalu_payload=&sendbuf_venc_sent[14 + rtp_offset];
 					memcpy(nalu_payload,buffer+t*nalu_sent_len,l);
+
+					//FU IND and FU header
+					sendbuf_venc_sent[12 + rtp_offset] = (NALU & 0x60) | 0x1C;
+					sendbuf_venc_sent[13 + rtp_offset] = (NALU & 0x1F) | 0x40;
+
 					bytes=l+14;
 //					sendto(udpfd_video, sendbuf_venc_sent, bytes, 0, (struct sockaddr *)&server,sizeof(server));
 
@@ -2341,7 +2358,6 @@ HI_S32 VENC_Sent(char *buffer, int buflen, int channel)
 //						printf("send seq = %d - %d bytes - 0x%2x-0x%2x-0x%2x-0x%2x-0x%2x-0x%2x\n", g_rtspClients[is].seqnum, bytes,
 //								sendbuf_venc_sent[0], sendbuf_venc_sent[1], sendbuf_venc_sent[2], sendbuf_venc_sent[3], sendbuf_venc_sent[4], sendbuf_venc_sent[5]);
 					}
-
 					t++;
 				}
 				else if(t<k && t!=0)
@@ -2349,20 +2365,24 @@ HI_S32 VENC_Sent(char *buffer, int buflen, int channel)
 					rtp_hdr->marker=0;
 
 //					fu_ind =(FU_INDICATOR*)&sendbuf_venc_sent[12];
-					fu_ind =(FU_INDICATOR*)&sendbuf_venc_sent[12 + rtp_offset];
-					fu_ind->F=0;
-					fu_ind->NRI=nIsIFrm;
-					fu_ind->TYPE=28;
+//					fu_ind =(FU_INDICATOR*)&sendbuf_venc_sent[12 + rtp_offset];
+//					fu_ind->F=0;
+//					fu_ind->NRI=3;
+//					fu_ind->TYPE=28;
 //					fu_hdr =(FU_HEADER*)&sendbuf_venc_sent[13];
-					fu_hdr =(FU_HEADER*)&sendbuf_venc_sent[13 + rtp_offset];
-					//fu_hdr->E=0;
-					fu_hdr->R=0;
-					fu_hdr->S=0;
-					fu_hdr->E=0;
-					fu_hdr->TYPE=nNaluType;
+//					fu_hdr =(FU_HEADER*)&sendbuf_venc_sent[13 + rtp_offset];
+//					fu_hdr->R=0;
+//					fu_hdr->S=0;
+//					fu_hdr->E=0;
+//					fu_hdr->TYPE=1;
 //					nalu_payload=&sendbuf_venc_sent[14];
 					nalu_payload=&sendbuf_venc_sent[14 + rtp_offset];
 					memcpy(nalu_payload,buffer+t*nalu_sent_len,nalu_sent_len);
+
+					//FU IND and FU header
+					sendbuf_venc_sent[12 + rtp_offset] = (NALU & 0x60) | 0x1C;
+					sendbuf_venc_sent[13 + rtp_offset] = (NALU & 0x1F);
+
 					bytes=nalu_sent_len+14;
 //					sendto(udpfd_video, sendbuf_venc_sent, bytes, 0, (struct sockaddr *)&server,sizeof(server));
 
@@ -2375,7 +2395,6 @@ HI_S32 VENC_Sent(char *buffer, int buflen, int channel)
 //						printf("send seq = %d - %d bytes - 0x%2x-0x%2x-0x%2x-0x%2x-0x%2x-0x%2x\n", g_rtspClients[is].seqnum, bytes,
 //								sendbuf_venc_sent[0], sendbuf_venc_sent[1], sendbuf_venc_sent[2], sendbuf_venc_sent[3], sendbuf_venc_sent[4], sendbuf_venc_sent[5]);
 					}
-
 					t++;
 				}
 			}
@@ -2408,6 +2427,7 @@ HI_S32 VENC_Sent(char *buffer, int buflen, int channel)
 	return HI_SUCCESS;
 }
 
+static int post = 0;
 static char sendbuf_venc_sentjin[320*1024];
 HI_S32 SAMPLE_COMM_VENC_Sentjin(VENC_STREAM_S *pstStream, int channel)
 {
@@ -2432,18 +2452,32 @@ HI_S32 SAMPLE_COMM_VENC_Sentjin(VENC_STREAM_S *pstStream, int channel)
 	    {
 			HI_S32 lens = 0;
 //			char sendbuf[320*1024];
-			//char tmp[640*1024];
 			lens = pstStream->pstPack[i].u32Len[0];
-			memcpy(&sendbuf_venc_sentjin[0],pstStream->pstPack[i].pu8Addr[0],lens);
+//			memcpy(&sendbuf_venc_sentjin[0],pstStream->pstPack[i].pu8Addr[0],lens);
+			memcpy(&sendbuf_venc_sentjin[post],pstStream->pstPack[i].pu8Addr[0],lens);
 
 			if (pstStream->pstPack[i].u32Len[1] > 0)
 			{
-				memcpy(&sendbuf_venc_sentjin[lens],pstStream->pstPack[i].pu8Addr[1],lens+pstStream->pstPack[i].u32Len[1]);
+//				memcpy(&sendbuf_venc_sentjin[lens],pstStream->pstPack[i].pu8Addr[1],lens+pstStream->pstPack[i].u32Len[1]);
+				memcpy(&sendbuf_venc_sentjin[lens+post],pstStream->pstPack[i].pu8Addr[1],lens+pstStream->pstPack[i].u32Len[1]);
 				lens = lens+pstStream->pstPack[i].u32Len[1];
 			}
-			VENC_Sent(sendbuf_venc_sentjin, lens, channel);
 
-		lens = 0;
+			//Join SPS, PPS, SEI and IDR in to 1 message
+			//Because SPS, PPS, SEI always follow by IDR and SPS, PPS, SEI lenght is short
+			//NRI     : bit 7-5: 3
+			//NAL type: bit 4-0: 7-SPS, 8-PPS, 6-SEI (SEI don't go with NRI), 5-IDR, 1-P frame
+			char NALU = sendbuf_venc_sentjin[post+4];
+			if ((NALU != 0x61) && (NALU != 0x65)) {
+				post += lens;
+			}
+			else {
+				lens += post;
+				VENC_Sent(sendbuf_venc_sentjin, lens, channel);
+				post = 0;;
+			}
+//			VENC_Sent(sendbuf_venc_sentjin, lens, channel);
+			lens = 0;
 	    }
     }
     return HI_SUCCESS;
