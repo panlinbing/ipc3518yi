@@ -2469,7 +2469,9 @@ HI_S32 SAMPLE_COMM_VENC_Sentjin(VENC_STREAM_S *pstStream, int channel)
 			//NAL type: bit 4-0: 7-SPS, 8-PPS, 6-SEI (SEI don't go with NRI), 5-IDR, 1-P frame
 			char NALU = sendbuf_venc_sentjin[post+4];
 			if ((NALU != 0x61) && (NALU != 0x65)) {
-				post += lens;
+				//Skip SEI type
+				if (NALU != 0x06)
+					post += lens;
 			}
 			else {
 				lens += post;
@@ -3740,8 +3742,8 @@ HI_S32 create_stream(HI_VOID)
 
     VENC_GRP VencGrp;
     VENC_CHN VencChn;
-    SAMPLE_RC_E enRcMode= SAMPLE_RC_CBR;
-//    SAMPLE_RC_E enRcMode= SAMPLE_RC_VBR;
+//    SAMPLE_RC_E enRcMode= SAMPLE_RC_CBR;
+    SAMPLE_RC_E enRcMode= SAMPLE_RC_VBR;
     HI_S32 s32ChnNum = 2;
 
     HI_S32 s32Ret = HI_SUCCESS;
@@ -3857,7 +3859,7 @@ HI_S32 create_stream(HI_VOID)
     VpssChn = 0;
     memset(&stVpssChnAttr, 0, sizeof(stVpssChnAttr));
     stVpssChnAttr.bFrameEn = HI_FALSE;
-    stVpssChnAttr.bSpEn    = HI_FALSE;
+    stVpssChnAttr.bSpEn    = HI_TRUE;
     s32Ret = SAMPLE_COMM_VPSS_EnableChn(VpssGrp, VpssChn, &stVpssChnAttr, HI_NULL, HI_NULL);
     if (HI_SUCCESS != s32Ret)
     {

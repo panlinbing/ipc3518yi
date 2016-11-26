@@ -414,12 +414,12 @@ HI_S32 SAMPLE_COMM_VENC_Start(VENC_GRP VencGrp,VENC_CHN VencChn, PAYLOAD_TYPE_E 
 
                 stH264Vbr.u32Gop = 40;
                 stH264Vbr.u32StatTime = 1;
-                stH264Vbr.u32ViFrmRate = 20;
 #ifdef USE_CAM_20_FPS
-                stH264Vbr.fr32TargetFrmRate = 20;
+                stH264Vbr.u32ViFrmRate = 20;
 #else //30FPS
-                stH264Vbr.fr32TargetFrmRate = 30;
+                stH264Vbr.u32ViFrmRate = 30;
 #endif //USE_CAM_20_FPS
+                stH264Vbr.fr32TargetFrmRate = 20;
                 stH264Vbr.u32MinQp = 24;
                 stH264Vbr.u32MaxQp = 40;
 
