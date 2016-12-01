@@ -319,7 +319,7 @@ int udpfd_video, udpfd_audio;
 
 #define SAMPLE_AUDIO_PTNUMPERFRM   160
 
-static HI_U32 PTS_INC = 120000;
+static HI_U32 PTS_INC = 0;
 
 // PT_G711A - PT_G711U - PT_ADPCMA - PT_G726 - PT_LPCM
 static PAYLOAD_TYPE_E gs_enPayloadType = PT_LPCM;
