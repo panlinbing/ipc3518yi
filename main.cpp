@@ -319,7 +319,7 @@ int udpfd_video, udpfd_audio;
 
 #define SAMPLE_AUDIO_PTNUMPERFRM   160
 
-static HI_U32 PTS_INC = 0;
+static HI_U32 PTS_INC = 120000;
 
 // PT_G711A - PT_G711U - PT_ADPCMA - PT_G726 - PT_LPCM
 static PAYLOAD_TYPE_E gs_enPayloadType = PT_LPCM;
@@ -2225,7 +2225,7 @@ HI_S32 VENC_Sent(char *buffer, int buflen, int channel)
 		rtp_hdr->marker    = 0;
 		rtp_hdr->ssrc      = htonl(10);
 
-		timestampRTP = PTS_INC * 32000 / 49;
+		timestampRTP = (float)PTS_INC * (float)32000 / (float)49;
 		g_rtspClients[is].tsvid = (unsigned int)timestampRTP;
 
 		rtp_hdr->timestamp=htonl(g_rtspClients[is].tsvid);
@@ -2412,7 +2412,7 @@ HI_S32 VENC_Sent(char *buffer, int buflen, int channel)
 		u_int32_t dts, pts;
 
 //		dts = pts = PTS_INC * 20;
-		timestampRTP = PTS_INC * 3200 / 441;
+		timestampRTP = (float)PTS_INC * (float)3200 / (float)441;
 		dts = pts = (u_int32_t)timestampRTP;
 		if (rtmp_send_h264_raw_stream(buffer, buflen, dts, pts) == -2) {
 			printf("%s: rtmp_send_h264_raw_stream send failed\n", __func__);
@@ -2781,7 +2781,7 @@ HI_S32 AENC_Sent(AUDIO_STREAM_S stream) {
 //			sendto(udpfd_audio, sendbuf_aenc_sent, sendlen, 0, (struct sockaddr *)&server, sizeof(server));
 
 			if (g_rtspClients[is].streamMode == RTP_UDP) {
-				sendto(udpfd_audio, sendbuf_aenc_sent, sendlen, 0, (struct sockaddr *)&server,sizeof(server));
+//				sendto(udpfd_audio, sendbuf_aenc_sent, sendlen, 0, (struct sockaddr *)&server,sizeof(server));
 			}
 			else {
 				rtsp_interleaved_audio->lenght = ENDIAN_SWAP16(sendlen);
@@ -2801,7 +2801,7 @@ HI_S32 AENC_Sent(AUDIO_STREAM_S stream) {
 		memcpy(sendbuf_aenc_sent, stream.pStream , buflen );
 
 //		pts = PTS_INC * 160;
-		timestampRTP = PTS_INC * 3200 / 441;
+		timestampRTP = (float)PTS_INC * (float)3200 / (float)441;
 		pts = (u_int32_t)timestampRTP;
 		if (rtmp_send_audio_raw_stream(sendbuf_aenc_sent, buflen , pts)) {
 			printf("%s: rtmp_send_audio_raw_stream send failed\n", __func__);
