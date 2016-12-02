@@ -2170,16 +2170,9 @@ HI_S32 VENC_Sent(char *buffer, int buflen, int channel)
 
 		char* nalu_payload;
 		int nAvFrmLen = 0;
-		int nIsIFrm = 0;
-		int nNaluType = 0;
-//		char sendbuf[1500];
+//		int nIsIFrm = 0;
+//		int nNaluType = 0;
 
-		//char sendbuf[64*1024+32];
-//		nChanNum = g_rtspClients[is].reqchn;
-//		if(nChanNum<0 || nChanNum>=MAX_CHAN )
-//		{
-//			continue;
-//		}
 		nAvFrmLen = buflen;
 		//printf("%d\n",nAvFrmLen);
 		//nAvFrmLen = vStreamInfo.dwSize ;//Streamlen
@@ -4712,7 +4705,7 @@ std::string decrypt_string(int num_block) {
 	if (plain_data[num_block * 16 - 1] != '}')
 		pad_byte = plain_data[num_block * 16 - 1];
     for (i = 0; i < pad_byte; i++)
-    	plain_data[num_block * 16 - i] = '\0';
+    	plain_data[num_block * 16 - i - 1] = '\0';
 
     std::string json_link(reinterpret_cast<const char*>(plain_data));
 	return json_link;
@@ -4947,11 +4940,13 @@ int main(int argc, char *argv[])
         	s32Ret = get_cam_id();
         	break;
         case 'H':
+#ifdef USE_CONNECT_HC
         	s32Ret = connect_HC();
             printf("please press twice ENTER to exit this sample\n");
             getchar();
             getchar();
         	s32Ret = disconnect_HC();
+#endif //USE_CONNECT_HC
         	break;
         case 'V':
 #ifdef USE_VIETTEL_IDC

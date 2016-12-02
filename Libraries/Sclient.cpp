@@ -166,11 +166,11 @@ SClient::SendKeepAliveCommand() {
 void *
 SClient::ThreadKeepAliveFunc(void *pData) {
 	SClient_p pSClient = (SClient_p)pData;
-	sleep(3);
+	sleep(50);
 	while (pSClient->mThreadKeepAliveRun) {
 		if (pSClient->m_pClientSock->IsConnected()) {
 			pSClient->SendKeepAliveCommand();
-			sleep(3);
+			sleep(50);
 		}
 		else {
 			pSClient->mThreadKeepAliveRun = FALSE;
