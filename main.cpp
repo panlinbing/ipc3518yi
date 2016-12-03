@@ -44,10 +44,6 @@
 #include <ifaddrs.h>
 
 #include <netinet/tcp.h>
-
-//#include <linux/if_ether.h>
-//#include <linux/sockios.h>
-//#include <netinet/in.h>
 #include <arpa/inet.h>
 
 #include "sample_comm.h"
@@ -58,9 +54,6 @@ using namespace std;
 using namespace zbar;
 using namespace cv;
 
-//#define nalu_sent_len        14000
-//#define nalu_sent_len        1400
-//#define nalu_sent_len        1300
 #define nalu_sent_len        1305
 #define RTP_H264                    96
 #define MAX_CHAN                 8
@@ -1939,11 +1932,6 @@ void * RtspServerListen(void*pParam)
 		}
 		if(exitok){ exitok++;return NULL; }
     }
-    if(s32CSocket < 0)
-    {
-       // HI_OUT_Printf(0, "RTSP listening on port %d,accept err, %d\n", RTSP_SERVER_PORT, s32CSocket);
-    }
-
 	printf("----- INIT_RTSP_Listen() Exit !! \n");
 
 	return NULL;
@@ -2055,7 +2043,7 @@ void * AudioServerListen(void*pParam)
         return (void *)(-2);
     }
 
-    s32Rtn = listen(s32Socket, 50);   /*50,×îŽóµÄÁ¬œÓÊý*/
+    s32Rtn = listen(s32Socket, 50);
     if(s32Rtn < 0)
     {
     	return (void *)(-2);
@@ -2110,11 +2098,6 @@ void * AudioServerListen(void*pParam)
 		}
 		if(exitok){ exitok++;return NULL; }
     }
-    if(s32CSocket < 0)
-    {
-       // HI_OUT_Printf(0, "RTSP listening on port %d,accept err, %d\n", RTSP_SERVER_PORT, s32CSocket);
-    }
-
 	printf("----- INIT_Audio_Listen() Exit !! \n");
 
 	return NULL;
@@ -2122,16 +2105,9 @@ void * AudioServerListen(void*pParam)
 
 static char sendbuf_venc_sent[1500];
 static float timestampRTP;
-//static char sendbuf_venc_server_test[1500];
-//RTP_FIXED_HEADER  *rtp_hdr_server_test;
-//NALU_HEADER		  *nalu_hdr_server_test;
-//FU_INDICATOR	  *fu_ind_server_test;
-//FU_HEADER		  *fu_hdr_server_test;
-//RTSP_CLIENT g_rtspClients_server_test;
 HI_S32 VENC_Sent(char *buffer, int buflen, int channel)
 {
 	int is=0;
-	int nChanNum=0;
 	for(is=0;is<MAX_RTSP_CLIENT;is++)
 	{
 		if ((g_rtspClients[is].status != RTSP_SENDING0) && (g_rtspClients[is].status != RTSP_SENDING1))
@@ -2143,62 +2119,17 @@ HI_S32 VENC_Sent(char *buffer, int buflen, int channel)
 			continue;
 		}
 
-//		int heart = g_rtspClients[is].seqnum % 1000;
-//
-//		if(heart==0 && g_rtspClients[is].seqnum!=0)
-//		{
-//			char buf[1024];
-//			memset(buf,0,1024);
-//			char *pTemp = buf;
-//			pTemp += sprintf(pTemp,"RTSP/1.0 200 OK\r\nCSeq: %d\r\nPublic: %s\r\n\r\n",
-//				0,"OPTIONS,DESCRIBE,SETUP,PLAY,PAUSE,TEARDOWN");
-//
-//			int reg = send(g_rtspClients[is].socket, buf,strlen(buf),0);
-//			if(reg <= 0)
-//			{
-//				//printf("RTSP:Send Error---- %d\n",reg);
-//				g_rtspClients[is].status = RTSP_IDLE;
-//				g_rtspClients[is].seqnum = 0;
-//				g_rtspClients[is].tsvid = 0;
-//				g_rtspClients[is].tsaud = 0;
-//				close(g_rtspClients[is].socket);
-//				continue;
-//			}
-//			else
-//			{
-//				printf("Heart:%d\n",reg);
-//			}
-//		}
-
 		char* nalu_payload;
 		int nAvFrmLen = 0;
-//		int nIsIFrm = 0;
-//		int nNaluType = 0;
 
 		nAvFrmLen = buflen;
-		//printf("%d\n",nAvFrmLen);
-		//nAvFrmLen = vStreamInfo.dwSize ;//Streamlen
 		struct sockaddr_in server;
 		server.sin_family=AF_INET;
 		server.sin_port=htons(g_rtspClients[is].rtpport[1]);
 		server.sin_addr.s_addr=inet_addr(g_rtspClients[is].IP);
 
-//		server.sin_port=htons(9000);
-//		server.sin_addr.s_addr=inet_addr("113.171.23.144");
-
 		int	bytes=0;
 		unsigned char rtp_offset = 0;
-//		unsigned int timestamp_increse=0;
-
-		//timeing in = out,15fps in,so same f out
-//		if(VIDEO_ENCODING_MODE_PAL == gs_enNorm) g_nframerate = 25;
-//		else if(VIDEO_ENCODING_MODE_NTSC == gs_enNorm) g_nframerate = 25;
-
-//		timestamp_increse=(unsigned int)(90000.0 / g_nframerate);
-
-		//sendto(udpfd, buffer, nAvFrmLen, 0, (struct sockaddr *)&server,sizeof(server));
-//		printf("send frame channel = %d: PTS = %d: %d bytes to %x:%x\n", channel, PTS_INC, buflen, server.sin_addr.s_addr, server.sin_port);
-//		printf("g_rtspClients[is].tsvid = %d: g_rtspClients[is].seqnum = %d\n", g_rtspClients[is].tsvid, g_rtspClients[is].seqnum);
 
 		if (g_rtspClients[is].streamMode == RTP_TCP) {
 			rtsp_interleaved = (RTSP_INTERLEAVED_FRAME*)sendbuf_venc_sent;
@@ -2230,7 +2161,7 @@ HI_S32 VENC_Sent(char *buffer, int buflen, int channel)
 		if(nAvFrmLen<=nalu_sent_len)
 		{
 			rtp_hdr->marker=1;
-//			rtp_hdr->seq_no     = htons(g_rtspClients[is].seqnum++);
+			rtp_hdr->seq_no     = htons(g_rtspClients[is].seqnum++);
 ////			nalu_hdr =(NALU_HEADER*)&sendbuf_venc_sent[12];
 //			nalu_hdr =(NALU_HEADER*)&sendbuf_venc_sent[12 + rtp_offset];
 //			nalu_hdr->F=0;
@@ -2240,15 +2171,10 @@ HI_S32 VENC_Sent(char *buffer, int buflen, int channel)
 //			nalu_payload=&sendbuf_venc_sent[13];
 			nalu_payload=&sendbuf_venc_sent[13 + rtp_offset];
 			memcpy(nalu_payload,buffer+5,nAvFrmLen-5);
-//			g_rtspClients[is].tsvid = g_rtspClients[is].tsvid+timestamp_increse;
-
-//			sendbuf_venc_sent[12 + rtp_offset] = buffer[4];
-//			*(char*)nalu_hdr = NALU;
 
 			//NAL header
 			sendbuf_venc_sent[12 + rtp_offset] = NALU;
 
-//			rtp_hdr->timestamp=htonl(g_rtspClients[is].tsvid);
 			bytes=nAvFrmLen + 13 - 5;
 //			sendto(udpfd_video, sendbuf_venc_sent, bytes, 0, (struct sockaddr *)&server,sizeof(server));
 
@@ -2258,14 +2184,7 @@ HI_S32 VENC_Sent(char *buffer, int buflen, int channel)
 			else {
 				rtsp_interleaved->lenght = ENDIAN_SWAP16(bytes);
 				send(g_rtspClients[is].socket, sendbuf_venc_sent, bytes + rtp_offset, 0);
-//				printf("send seq = %d - %d bytes - 0x%2x-0x%2x-0x%2x-0x%2x-0x%2x-0x%2x\n", g_rtspClients[is].seqnum, bytes,
-//						sendbuf_venc_sent[0], sendbuf_venc_sent[1], sendbuf_venc_sent[2], sendbuf_venc_sent[3], sendbuf_venc_sent[4], sendbuf_venc_sent[5]);
 			}
-
-//			g_rtspClients[is].tsvid = g_rtspClients[is].tsvid+timestamp_increse;
-//			g_rtspClients[is].tsvid = PTS_INC * 1800;
-//			timestampRTP = PTS_INC * 32000 / 49;
-//			g_rtspClients[is].tsvid = (unsigned int)timestampRTP;
 		}
 		else if(nAvFrmLen>nalu_sent_len)
 		{
@@ -2273,7 +2192,6 @@ HI_S32 VENC_Sent(char *buffer, int buflen, int channel)
 			k=nAvFrmLen/nalu_sent_len;
 			l=nAvFrmLen%nalu_sent_len;
 			int t=0;
-//			g_rtspClients[is].tsvid = g_rtspClients[is].tsvid+timestamp_increse;
 
 			while(t<=k)
 			{
@@ -2311,11 +2229,8 @@ HI_S32 VENC_Sent(char *buffer, int buflen, int channel)
 					else {
 						rtsp_interleaved->lenght = ENDIAN_SWAP16(bytes);
 						send(g_rtspClients[is].socket, sendbuf_venc_sent, bytes + rtp_offset, 0);
-//						printf("send seq = %d - %d bytes - 0x%2x-0x%2x-0x%2x-0x%2x-0x%2x-0x%2x\n", g_rtspClients[is].seqnum, bytes,
-//								sendbuf_venc_sent[0], sendbuf_venc_sent[1], sendbuf_venc_sent[2], sendbuf_venc_sent[3], sendbuf_venc_sent[4], sendbuf_venc_sent[5]);
 					}
 					t++;
-
 				}
 				else if(k==t)
 				{
@@ -2350,8 +2265,6 @@ HI_S32 VENC_Sent(char *buffer, int buflen, int channel)
 					else {
 						rtsp_interleaved->lenght = ENDIAN_SWAP16(bytes);
 						send(g_rtspClients[is].socket, sendbuf_venc_sent, bytes + rtp_offset, 0);
-//						printf("send seq = %d - %d bytes - 0x%2x-0x%2x-0x%2x-0x%2x-0x%2x-0x%2x\n", g_rtspClients[is].seqnum, bytes,
-//								sendbuf_venc_sent[0], sendbuf_venc_sent[1], sendbuf_venc_sent[2], sendbuf_venc_sent[3], sendbuf_venc_sent[4], sendbuf_venc_sent[5]);
 					}
 					t++;
 				}
@@ -2387,18 +2300,11 @@ HI_S32 VENC_Sent(char *buffer, int buflen, int channel)
 					else {
 						rtsp_interleaved->lenght = ENDIAN_SWAP16(bytes);
 						send(g_rtspClients[is].socket, sendbuf_venc_sent, bytes + rtp_offset, 0);
-//						printf("send seq = %d - %d bytes - 0x%2x-0x%2x-0x%2x-0x%2x-0x%2x-0x%2x\n", g_rtspClients[is].seqnum, bytes,
-//								sendbuf_venc_sent[0], sendbuf_venc_sent[1], sendbuf_venc_sent[2], sendbuf_venc_sent[3], sendbuf_venc_sent[4], sendbuf_venc_sent[5]);
 					}
 					t++;
 				}
 			}
-//			g_rtspClients[is].tsvid = g_rtspClients[is].tsvid+timestamp_increse;
-//			g_rtspClients[is].tsvid = PTS_INC * 1800;
-//			timestampRTP = PTS_INC * 32000 / 49;
-//			g_rtspClients[is].tsvid = (unsigned int)timestampRTP;
 		}
-
 	}
 
 //send to server_test
