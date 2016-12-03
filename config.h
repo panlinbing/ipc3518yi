@@ -10,6 +10,7 @@
 
 //#define RELEASE_NOT_STOP			1
 #define CHECK_ISP_REGISTER			1
+#define CHECK_ENCRYPT_CAMID			1
 
 #define USE_RTSP					1
 #define USE_RTMP_INIT_THREAD		1

@@ -128,8 +128,12 @@ int sync_time();
 //region to display current
 //int create_time_region(VENC_GRP VencGrpStart, HI_S32 grpcnt, PIC_SIZE_E *enSize);
 //int destroy_time_region(VENC_GRP VencGrpStart, HI_S32 grpcnt);
-int check_isp_register();
+
 void * connect_server_authen_send_detect_command(void* pParam);
+
+#ifdef CHECK_ISP_REGISTER
+int check_isp_register();
+#endif //CHECK_ISP_REGISTER
 
 #ifdef USE_CONNECT_HC
 int connect_HC();

@@ -948,8 +948,10 @@ HI_S32 WIFI_LOGIN(HI_VOID)
         goto END_VENC_SNAP_1;
     }
 
+#ifdef CHECK_ISP_REGISTER
     //check if isp register has init
     check_isp_register();
+#endif //CHECK_ISP_REGISTER
 
     /******************************************
      step 4: start vpss and vi bind vpss
@@ -3704,8 +3706,8 @@ int read_register(HI_U32 addr, HI_U32 *value) {
 //	return 0;
 //}
 
-int check_isp_register() {
 #ifdef CHECK_ISP_REGISTER
+int check_isp_register() {
 	HI_U32 addr, value;
 	addr = 0x205a0010;
 	read_register(addr, &value);
@@ -3715,9 +3717,9 @@ int check_isp_register() {
 		system("reboot");
 		system("reboot");
 	}
-#endif //CHECK_ISP_REGISTER
 	return 0;
 }
+#endif //CHECK_ISP_REGISTER
 
 HI_S32 create_stream(HI_VOID)
 {
@@ -3812,8 +3814,10 @@ HI_S32 create_stream(HI_VOID)
         goto END_VENC_720P_CLASSIC_1;
     }
 
+#ifdef CHECK_ISP_REGISTER
     //check if isp register has init
     check_isp_register();
+#endif //CHECK_ISP_REGISTER
 
     /******************************************
      step 4: start vpss and vi bind vpss
@@ -4623,23 +4627,6 @@ int disconnect_HC() {
 }
 #endif //USE_CONNECT_HC
 
-/******************************************************************************
-* group: Viettel IDC - HTTP POST - RTMP
-******************************************************************************/
-#ifdef USE_VIETTEL_IDC
-#define VTIDC_AUTHEN_SERVER	"http://125.212.227.174/cloud-camera/services/camera"
-#define VTIDC_AUTHEN_SERVER_PUSH "http://125.212.227.174/cloud-camera/services/camera/push"
-#define VTIDC_AUTHEN_SERVER_PULL "http://125.212.227.174/cloud-camera/services/camera/pull"
-#define AES128_KEY				"cloudcameraVTIDC"
-#define CLOUD_ID				"cloudidtest01"
-#define SECURE_CODE				"123456"
-#define DEVICE_SERIAL			"23172463"
-#define AES_BLOCK_NUM_BYTE		16
-
-unsigned char plain_data[300];
-unsigned char cipher_data[300];
-unsigned char aes128_key[16];
-//unsigned char send_buff[600];
 
 // prints string as hex
 void phex(uint8_t* str)
@@ -4650,7 +4637,17 @@ void phex(uint8_t* str)
     printf("\n");
 }
 
-int encrypt_string(std::string input_str) {
+/******************************************************************************
+* group: AES 128
+******************************************************************************/
+const std::string AES128_KEY_VIETTEL_IDC	= "cloudcameraVTIDC";
+const std::string AES128_KEY_LUMI			= "lumihi3518camera";
+const unsigned char AES_BLOCK_NUM_BYTE		= 16;
+unsigned char plain_data[300];
+unsigned char cipher_data[300];
+unsigned char aes128_key[20];
+
+int encrypt_string(std::string input_str, std::string encrypt_key) {
 	int i, num_block, str_len;
 	unsigned char pad_byte;
 
@@ -4665,40 +4662,41 @@ int encrypt_string(std::string input_str) {
 	memset(plain_data, pad_byte, 300);
 
 	strcpy((char *)plain_data, input_str.c_str());
-	strcpy((char *)aes128_key, AES128_KEY);
-
+	strcpy((char *)aes128_key, encrypt_key.c_str());
 
 	plain_data[input_str.length()] = pad_byte;
 	num_block = input_str.length() / AES_BLOCK_NUM_BYTE + 1;
 
 	//debug - print plain text
-    printf("plain text: - %d - %d - pad - 0x%2x\n", input_str.length(), num_block, pad_byte);
-    for(i = 0; i < num_block; ++i)
-    {
-        phex(plain_data + i * (uint8_t) AES_BLOCK_NUM_BYTE);
-    }
-    printf("\n");
+//    printf("plain text: - %d - %d - pad - 0x%2x\n", input_str.length(), num_block, pad_byte);
+//    for(i = 0; i < num_block; ++i)
+//    {
+//        phex(plain_data + i * (uint8_t) AES_BLOCK_NUM_BYTE);
+//    }
+//    printf("\n");
 
     //debug - print cipher text
-    printf("ciphertext:\n");
+//    printf("ciphertext:\n");
     for(i = 0; i < num_block; ++i)
     {
         AES128_ECB_encrypt(plain_data + (i*16), aes128_key, cipher_data+(i*16));
-        phex(cipher_data + (i*16));
+//        phex(cipher_data + (i*16));
     }
     printf("\n");
 	return num_block * 16;
 }
 
-std::string decrypt_string(int num_block) {
+std::string decrypt_string(int num_block, std::string encrypt_key) {
 	int i;
 	unsigned char pad_byte = 0;
 
-	printf("plain text: - %d\n", num_block);
+	strcpy((char *)aes128_key, encrypt_key.c_str());
+
+//	printf("plain text: - %d\n", num_block);
     for(i = 0; i < num_block; ++i)
     {
     	AES128_ECB_decrypt(cipher_data + (i*16), aes128_key, plain_data+(i*16));
-        phex(plain_data + (i*16));
+//        phex(plain_data + (i*16));
     }
 
     //remove pad byte
@@ -4710,6 +4708,17 @@ std::string decrypt_string(int num_block) {
     std::string json_link(reinterpret_cast<const char*>(plain_data));
 	return json_link;
 }
+
+/******************************************************************************
+* group: Viettel IDC - HTTP POST - RTMP
+******************************************************************************/
+#ifdef USE_VIETTEL_IDC
+#define VTIDC_AUTHEN_SERVER	"http://125.212.227.174/cloud-camera/services/camera"
+#define VTIDC_AUTHEN_SERVER_PUSH "http://125.212.227.174/cloud-camera/services/camera/push"
+#define VTIDC_AUTHEN_SERVER_PULL "http://125.212.227.174/cloud-camera/services/camera/pull"
+#define CLOUD_ID				"cloudidtest01"
+#define SECURE_CODE				"123456"
+#define DEVICE_SERIAL			"23172463"
 
 //TRUE - rtmp; FALSE - rtsp
 std::string VTIDC_create_message(bool rtmp) {
@@ -4729,7 +4738,7 @@ std::string VTIDC_create_message(bool rtmp) {
 	input_str = fastWriter.write(root);
 	printf("input_str: %d - %s\n", input_str.length(), input_str.c_str());
 
-	num_chars = encrypt_string(input_str);
+	num_chars = encrypt_string(input_str, AES128_KEY_VIETTEL_IDC);
 
 	//convert cipher_data to string. Ex: 0x2a -> "2a"
 	std::stringstream ss;
@@ -4824,7 +4833,7 @@ std::string VTIDC_parse_recv_message(std::string recv_str) {
 			    }
 			    printf("\n");
 
-			    std::string json_link = decrypt_string(num_block);
+			    std::string json_link = decrypt_string(num_block, AES128_KEY_VIETTEL_IDC);
 			    Json::Value root_link;
 
 			    if (reader.parse(json_link, root_link)) {
@@ -4894,6 +4903,59 @@ int VTIDC_stop_rtmp_stream() {
 #endif //USE_VIETTEL_IDC
 
 
+#ifdef CHECK_ENCRYPT_CAMID
+#define KEY_FILE	"/etc/key"
+
+int read_key(char *data, int len){
+	FILE *pfile;
+	int ret;
+
+	pfile = fopen(KEY_FILE, "rb");
+	if (!pfile)
+		return -1;
+
+	ret = fread(data, 1, len, pfile);
+	if (data[ret - 1] == '\n')
+		data[ret - 1] = '\0';
+	printf("%s is: \"%s\" - %d\n", KEY_FILE, data, ret);
+
+	fclose(pfile);
+	return 0;
+}
+
+int check_encrypt_camid() {
+	int i, ret, len;
+	char key[100];
+
+	memset(key, 0, 100);
+	read_key(key, 100);
+	std::string str_key = key;
+	printf("str_key - %d - %s\n", str_key.length(), str_key.c_str());
+
+	//convert recv string to cipher data. Ex: "2a" -> 0x2a
+	len = str_key.length();
+	for (i = 0; i < len; i += 2) {
+		std::string byte = str_key.substr(i, 2);
+		cipher_data[i / 2] = strtol(byte.c_str(), NULL, 16);
+    }
+
+    int num_block = (len / 2 + 15) / AES_BLOCK_NUM_BYTE;
+
+    std::string str_decrypt = decrypt_string(num_block, AES128_KEY_LUMI);
+    printf("str_decrypt - %d - %s\n", str_decrypt.length(), str_decrypt.c_str());
+
+    if (str_decrypt.compare(camid)) {
+    	printf("!!!!!!!!!! Check key fail\n");
+    	ret = 1;
+    }
+    else {
+    	printf("========== Check key success\n");
+    	ret = 0;
+    }
+	return ret;
+}
+#endif //CHECK_ENCRYPT_CAMID
+
 /******************************************************************************
 * function    : main()
 * Description : main program
@@ -4911,6 +4973,12 @@ int main(int argc, char *argv[])
     signal(SIGTERM, SAMPLE_VENC_HandleSig);
     
     get_camera_info();
+
+#ifdef CHECK_ENCRYPT_CAMID
+    s32Ret = check_encrypt_camid();
+    if (s32Ret)
+    	return -1;
+#endif //CHECK_ENCRYPT_CAMID
 
     switch (*argv[1])
     {
