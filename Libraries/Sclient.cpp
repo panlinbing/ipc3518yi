@@ -61,15 +61,20 @@ JsonCommand_p SClient::getJsonCommand() {
 	size_t posEnd = mRemainData.find(END); // find 1st $end
 	if (posEnd == std::string::npos) {
 		mCommandValid = FALSE;
-		mRemainData.clear();
 		return NULL;
 	}
 	else {
 		size_t posBegin = mRemainData.rfind(STA, posEnd - 1);
-        size_t posParen = mRemainData.substr(posBegin, posEnd - posBegin).find(DE1); // find {
-        size_t posEqual = mRemainData.substr(posBegin, posEnd - posBegin).find(DE2); // find 1st =
+		if (std::string::npos == posBegin) {
+			mCommandValid = FALSE;
+			setRemainData(mRemainData.substr(posEnd + END.length()));
+			return NULL;
+		}
 
-		if ((std::string::npos == posBegin) || (std::string::npos == posParen) || (std::string::npos == posEqual)) {
+        size_t posParen = posBegin + mRemainData.substr(posBegin, posEnd - posBegin).find(DE1); // find {
+        size_t posEqual = posBegin + mRemainData.substr(posBegin, posEnd - posBegin).find(DE2); // find 1st =
+
+		if ((std::string::npos == posParen) || (std::string::npos == posEqual)) {
 			mCommandValid = FALSE;
 			setRemainData(mRemainData.substr(posEnd + END.length()));
 			return NULL;
@@ -78,7 +83,6 @@ JsonCommand_p SClient::getJsonCommand() {
 		std::string strCmdClass = mRemainData.substr(posBegin + STA.length(), posEqual - posBegin - STA.length());
 		std::string strCommand = mRemainData.substr(posEqual + DE2.length(), posParen - posEqual - DE2.length());
 		std::string strJsonValue = mRemainData.substr(posParen, posEnd - posParen);
-
 
 		setRemainData(mRemainData.substr(posEnd + END.length()));
 		return new JsonCommand(strCmdClass, strCommand, strJsonValue);
