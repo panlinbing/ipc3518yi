@@ -4,18 +4,21 @@
 
 # Add inputs and outputs from these tool invocations to the build variables 
 CPP_SRCS += \
+../iq.cpp \
 ../main.cpp \
 ../ntp.cpp \
 ../region.cpp \
 ../vda.cpp 
 
 OBJS += \
+./iq.o \
 ./main.o \
 ./ntp.o \
 ./region.o \
 ./vda.o 
 
 CPP_DEPS += \
+./iq.d \
 ./main.d \
 ./ntp.d \
 ./region.d \

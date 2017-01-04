@@ -13,6 +13,7 @@
 
 #include "main.h"
 #include "region.h"
+#include "iq.h"
 #include "rtmp/rtmp.h"
 #include "json.h"
 #include "vda.h"
@@ -4137,6 +4138,10 @@ void * thread_sync_time(HI_VOID *p) {
 			sync_time();
 			pre_hour = now->tm_hour;
 		}
+
+		//run image quality auto
+		image_quality_auto();
+
 		sleep(30);
 	}
 

@@ -27,8 +27,8 @@ Libraries \
 common \
 core \
 highgui \
-libjpeg \
 . \
+libjpeg \
 rtmp \
 socket \
 
