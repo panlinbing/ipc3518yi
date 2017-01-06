@@ -2783,6 +2783,8 @@ void *SAMPLE_COMM_AUDIO_AencProcSent(void *parg) {
 
             /*Send stream to client */
             PTS_INC++;
+            if (PTS_INC > 6576668)
+                PTS_INC = 0;
             AENC_Sent(stStream);
 
 
