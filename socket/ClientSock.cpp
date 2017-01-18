@@ -82,10 +82,6 @@ ClientSock::ClientSock(
 }
 
 ClientSock::~ClientSock() {
-    if (m_pSockAddr != NULL) {
-        delete(m_pSockAddr);
-    }
-
     if (m_pByBuffer != NULL) {
         delete[] m_pByBuffer;
         m_pByBuffer = NULL;
