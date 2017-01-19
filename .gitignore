@@ -33,3 +33,4 @@
 *.sqlite
 
 /Release/
+Release/
