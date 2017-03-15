@@ -286,7 +286,7 @@ HI_S32 SAMPLE_IQ_SetGammaTable(HI_U8 u8GammaTabNum)
         return s32Ret;
     }
 
-    printf("use gamma%d\n", u8GammaTabNum);
+//    printf("use gamma%d\n", u8GammaTabNum);
     return HI_SUCCESS;
 }
 
@@ -479,10 +479,10 @@ HI_S32 SAMPLE_IQ_Vpss(HI_BOOL bAuto)
             return s32Ret;
         }    
         
-        printf("------------------------------------------------------------------------------------\n");
-        printf("   ISO   SF   TF   CS\n");
-        printf("%6d  %3d  %3d  %3d\n", u32ISO, stVpssParam.u32SfStrength, stVpssParam.u32TfStrength
-               , stVpssParam.u32ChromaRange);
+//        printf("------------------------------------------------------------------------------------\n");
+//        printf("   ISO   SF   TF   CS\n");
+//        printf("%6d  %3d  %3d  %3d\n", u32ISO, stVpssParam.u32SfStrength, stVpssParam.u32TfStrength
+//               , stVpssParam.u32ChromaRange);
         
         if(bAuto)
         {

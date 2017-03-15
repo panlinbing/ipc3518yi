@@ -21,6 +21,7 @@
 
 #define ERR_WRONG_AUTHENTICATE_KEY		-24
 
+#define FILE_CAMNAME	"/etc/test/name"
 #define FILE_USER	"/etc/test/user"
 #define FILE_PASS	"/etc/test/pass"
 #define FILE_IP		"/etc/test/ip"

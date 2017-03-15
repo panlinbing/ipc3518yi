@@ -125,11 +125,11 @@ SClient::setState(enum SClient::State state) {
 }
 
 bool
-SClient::Connect() {
+SClient::Connect(bool sendKeepAlive) {
 	bool ret;
     if (m_pClientSock != NULL) {
         ret = m_pClientSock->Connect();
-        if (ret == TRUE)
+        if ((ret == TRUE) && sendKeepAlive)
         	StartThreadKeepAlive();
         return ret;
     }

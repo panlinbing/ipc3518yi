@@ -19,6 +19,8 @@
 #include "vda.h"
 #include "ClientSock.hpp"
 #include "Sclient.hpp"
+#include "md5.h"
+#include "stunclient.hpp"
 //#ifdef USE_VIETTEL_IDC
 #include "aes.h"
 #include "curl/curl.h"
@@ -144,6 +146,7 @@ static pthread_t thread_read_HC_data;
 static std::string VTIDC_rtmp_url;
 
 //cam info
+static char camname[MAX_USER_PASS_LEN];
 static char user[MAX_USER_PASS_LEN];
 static char pass[MAX_USER_PASS_LEN];
 static char camip[20];
@@ -261,6 +264,29 @@ typedef struct
 	char IP[20];
 	char urlPre[PARAM_STRING_MAX];
 }RTSP_CLIENT;
+
+//P2P
+#ifdef USE_TEST_P2P
+#define MAX_P2P_CLIENT	10
+#define VIDEO_PORT_P2P  30000
+int udpfd_video_p2p = -1;
+typedef enum
+{
+	RTP_IDLE = 0,
+	RTP_SENDING0 = 2,	//stream channel 0
+	RTP_SENDING1 = 3,  //stream channel 1
+}RTP_STATUS;
+typedef struct
+{
+	unsigned int seqnum[2];
+	unsigned int timestamp[2];
+	int status;
+	int rtpport[2];
+	char ip[20];
+}P2P_CLIENT;
+P2P_CLIENT g_p2pClients[MAX_P2P_CLIENT];
+unsigned char g_p2pNumClients = 0;
+#endif //USE_TEST_P2P
 
 typedef struct
 {
@@ -2308,6 +2334,104 @@ HI_S32 VENC_Sent(char *buffer, int buflen, int channel)
 		}
 	}
 
+
+#ifdef USE_TEST_P2P
+	for (int i = 0; i < MAX_P2P_CLIENT; i++) {
+		if (g_p2pClients[i].status != RTP_SENDING0)
+		{
+		    continue;
+		}
+		if (g_p2pClients[i].status != (channel + 2)) {
+			continue;
+		}
+
+		char NALU = buffer[4];
+		char *nalu_payload;
+		int send_len;
+		struct sockaddr_in client;
+
+		client.sin_family = AF_INET;
+		client.sin_addr.s_addr = inet_addr(g_p2pClients[i].ip);
+		client.sin_port = htons(g_p2pClients[i].rtpport[0]);
+
+		timestampRTP = (float)PTS_INC * (float)32000 / (float)49;
+		g_p2pClients[i].timestamp[0] = (unsigned int)timestampRTP;
+
+		rtp_hdr = (RTP_FIXED_HEADER*)&sendbuf_venc_sent[0];
+		rtp_hdr->payload = RTP_H264;
+		rtp_hdr->version = 2;
+		rtp_hdr->ssrc = htonl(10);
+		rtp_hdr->timestamp = htonl(g_p2pClients[i].timestamp[0]);
+
+
+		if (buflen <= nalu_sent_len) {
+			rtp_hdr->marker = 1;
+			rtp_hdr->seq_no     = htons(g_p2pClients[i].seqnum[0]++);
+
+			//NAL header
+			sendbuf_venc_sent[12] = NALU;
+
+			nalu_payload = &sendbuf_venc_sent[13];
+			memcpy(nalu_payload, buffer + 5, buflen - 5);
+
+			send_len = buflen + 13 - 5;
+			sendto(udpfd_video_p2p, sendbuf_venc_sent, send_len, 0, (struct sockaddr *)&client,sizeof(client));
+		}
+		else {
+			int k = 0, l = 0, t = 0;
+			k=buflen / nalu_sent_len;
+			l=buflen % nalu_sent_len;
+
+			while (t <= k) {
+				rtp_hdr->seq_no = htons(g_p2pClients[i].seqnum[0]++);
+				if (t == 0) {
+					rtp_hdr->marker = 0;
+
+					//FU IND and FU header
+					sendbuf_venc_sent[12] = (NALU & 0x60) | 0x1C;
+					sendbuf_venc_sent[13] = (NALU & 0x1F) | 0x80;
+
+					nalu_payload = &sendbuf_venc_sent[14];
+					memcpy(nalu_payload, buffer + 5, nalu_sent_len - 5);
+
+					send_len = nalu_sent_len + 14 - 5;
+					sendto(udpfd_video_p2p, sendbuf_venc_sent, send_len, 0, (struct sockaddr *)&client,sizeof(client));
+					t++;
+				}
+				else if (k == t) {
+					rtp_hdr->marker = 1;
+
+					//FU IND and FU header
+					sendbuf_venc_sent[12] = (NALU & 0x60) | 0x1C;
+					sendbuf_venc_sent[13] = (NALU & 0x1F) | 0x40;
+
+					nalu_payload = &sendbuf_venc_sent[14];
+					memcpy(nalu_payload, buffer + t * nalu_sent_len, l);
+
+					send_len = l + 14;
+					sendto(udpfd_video_p2p, sendbuf_venc_sent, send_len, 0, (struct sockaddr *)&client,sizeof(client));
+					t++;
+				}
+				else if ((t < k) && (t != 0)) {
+					rtp_hdr->marker = 0;
+
+					//FU IND and FU header
+					sendbuf_venc_sent[12] = (NALU & 0x60) | 0x1C;
+					sendbuf_venc_sent[13] = (NALU & 0x1F);
+
+					nalu_payload = &sendbuf_venc_sent[14];
+					memcpy(nalu_payload, buffer + t * nalu_sent_len, nalu_sent_len);
+
+					send_len = nalu_sent_len + 14;
+					sendto(udpfd_video_p2p, sendbuf_venc_sent, send_len, 0, (struct sockaddr *)&client,sizeof(client));
+					t++;
+				}
+			}
+		}
+	}
+#endif //USE_TEST_P2P
+
+
 //send to server_test
 	if ((send_RTMP_to_server) && (channel == 0) && (reInitRTMP == HI_FALSE)) {
 		//send frame to rtmp server
@@ -4095,16 +4219,16 @@ void InitRtspServer()
 	connect_HC();
 #endif //USE_CONNECT_HC
 
-#ifdef USE_VIETTEL_IDC
-	s32Ret = VTIDC_start_rtmp_stream();
-#endif //USE_VIETTEL_IDC
+//#ifdef USE_VIETTEL_IDC
+//	s32Ret = VTIDC_start_rtmp_stream();
+//#endif //USE_VIETTEL_IDC
 
 	//init VENC and AENC to get video and audio stream
 	s32Ret = create_stream();
 
-#ifdef USE_VIETTEL_IDC
-	VTIDC_stop_rtmp_stream();
-#endif //USE_VIETTEL_IDC
+//#ifdef USE_VIETTEL_IDC
+//	VTIDC_stop_rtmp_stream();
+//#endif //USE_VIETTEL_IDC
 
 #ifdef USE_CONNECT_HC
 	disconnect_HC();
@@ -4124,6 +4248,8 @@ void InitRtspServer()
 	exitok++;
 }
 
+time_t t_TimeLaseMsg;
+
 void * thread_sync_time(HI_VOID *p) {
 	time_t t;
 	struct tm *now;
@@ -4139,6 +4265,8 @@ void * thread_sync_time(HI_VOID *p) {
 		if (now->tm_hour != pre_hour) {
 			sync_time();
 			pre_hour = now->tm_hour;
+			t_TimeLaseMsg = time(NULL);
+			printf("---------- update t_TimeLaseMsg: t_TimeLaseMsg = %d\n", t_TimeLaseMsg);
 		}
 
 		//run image quality auto
@@ -4203,6 +4331,7 @@ int read_info(const char *filename, char *data, int len){
 	if (!pfile)
 		return -1;
 
+	memset(data, 0, len);
 	ret = fread(data, 1, len, pfile);
 	if (data[ret - 1] == '\n')
 		data[ret - 1] = '\0';
@@ -4248,7 +4377,7 @@ int get_camera_info() {
 		//read camera info
 		ret = read_info(FILE_USER, user, MAX_USER_PASS_LEN);
 		ret = read_info(FILE_PASS, pass, MAX_USER_PASS_LEN);
-//		ret = read_info(FILE_IP, camip, 20);
+		ret = read_info(FILE_CAMNAME, camname, MAX_USER_PASS_LEN);
 		ret = read_info(FILE_PORT, port, 10);
 	}
 	ret = get_cam_local_ip(camip, "ra0");
@@ -4514,7 +4643,7 @@ int connect_HC() {
 	pClientSocket = new ClientSock(hc_ip.c_str(), HC_PORT);
 	pSClient = new SClient(pClientSocket);
 
-	if (!pSClient->Connect()) {
+	if (!pSClient->Connect(TRUE)) {
 		printf("connect HC failed\n");
 		return -1;
 	}
@@ -4869,6 +4998,426 @@ int check_encrypt_camid() {
 }
 #endif //CHECK_ENCRYPT_CAMID
 
+#ifdef USE_TEST_P2P
+ClientSock_p	p_P2PClientSocket	= NULL;
+SClient_p	p_P2PSClient		= NULL;
+static pthread_t thread_read_P2P_server_data;
+static pthread_t thread_update_NAT_info;
+
+static char s_mapping_type[200];
+static char s_filtering_type[200];
+static char s_local_address[50];
+static char s_pubic_address[50];
+
+#define BUFLEN 512  //Max length of buffer
+struct sockaddr_in si_all;
+socklen_t slen_all = sizeof(si_all);
+pthread_t pthread_all;
+ssize_t recv_len;
+bool p2p_receive = false;
+
+std::string p2p_server_ip;
+int p2p_server_port;
+
+void* threadRecvMsg_all(void* arg) {
+    char buf_all[BUFLEN];
+    printf("\n**********%s start\n", __FUNCTION__);
+
+    while (p2p_receive) {
+        memset(buf_all,'\0', BUFLEN);
+        //try to receive some data, this is a blocking call
+        if ((recv_len = recvfrom(udpfd_video_p2p, buf_all, BUFLEN, 0, (struct sockaddr *) &si_all, &slen_all)) == -1) {
+            printf("recvfrom() all");
+        }
+        printf("\n==========---------- udp from %s:%d - len = %d- %s\n", inet_ntoa(si_all.sin_addr), ntohs(si_all.sin_port), recv_len, buf_all);
+    }
+    printf("\n**********%s exit\n", __FUNCTION__);
+    pthread_exit(NULL);
+    return NULL;
+}
+
+int P2P_stream_to(Json::Value& root) {
+	int i, index;
+	std::string app_public, app_public_ip, app_public_port;
+	std::string app_local, app_local_ip, app_local_port, app_local_prefix;
+	std::string cam_local_ip = s_local_address;
+	std::string cam_public_ip = s_pubic_address;
+	std::string cam_local_prefix;
+	bool send_to_app_public = TRUE;
+
+	app_public = root["mapped_address"].asString();
+	index = app_public.find(':', 0);
+	app_public_ip = app_public.substr(0, index);
+	app_public_port = app_public.substr(index + 1, app_public.length() - index - 1);
+
+	app_local = root["local_address"].asString();
+    index = app_local.find(':', 0);
+    app_local_ip = app_local.substr(0, index);
+    app_local_port = app_local.substr(index + 1, app_local.length() - index - 1);
+
+    index = app_local_ip.rfind('.');
+    app_local_prefix = app_local_ip.substr(0, index);
+
+    index = cam_public_ip.rfind(':');
+    cam_public_ip = cam_public_ip.substr(0, index);
+
+    index = cam_local_ip.rfind('.');
+    cam_local_prefix = cam_local_ip.substr(0, index);
+
+    if ((app_public_ip.compare(cam_public_ip) == 0)
+            && (app_local_prefix.compare(cam_local_prefix) == 0)) {
+        send_to_app_public = FALSE;
+    }
+
+	for (i = 0; i < MAX_P2P_CLIENT; i++) {
+		if (g_p2pClients[i].status == RTP_IDLE) {
+		    if (send_to_app_public){
+                strcpy(g_p2pClients[i].ip, app_public_ip.c_str());
+                g_p2pClients[i].rtpport[0] = atoi(app_public_port.c_str());
+		    }
+		    else {
+                strcpy(g_p2pClients[i].ip, app_local_ip.c_str());
+                g_p2pClients[i].rtpport[0] = atoi(app_local_port.c_str());
+		    }
+
+			g_p2pClients[i].seqnum[0] = 0;
+			g_p2pClients[i].status = RTP_SENDING0;
+			g_p2pNumClients++;
+			printf("========== %s: g_p2pNumClients - %d\n", __FUNCTION__, g_p2pNumClients);
+			printf("ip - %s\n", g_p2pClients[i].ip);
+			printf("rtpport - %d\n", g_p2pClients[i].rtpport[0]);
+			break;
+		}
+	}
+	if (i == MAX_P2P_CLIENT) {
+		printf("%s: out of client", __FUNCTION__);
+		return -1;
+	}
+
+	//Send respond to server
+    Json::Value respond;
+    respond["result_code"] = 0;
+    respond["description"] = "Success";
+
+    JsonCommand_p pJsonCommand = new JsonCommand();
+    pJsonCommand->SetCmdClass("app");
+    pJsonCommand->SetCommand("ACK");
+    pJsonCommand->SetJsonObject(respond);
+    return p_P2PSClient->sendJsonCommand(pJsonCommand);
+
+	return 0;
+}
+
+int P2P_wait_request_stream_from(Json::Value& root) {
+	return 0;
+}
+
+int P2P_stop_stream_to(Json::Value& root) {
+	int i, index;
+    std::string app_public, app_public_ip, app_public_port;
+    std::string app_local, app_local_ip, app_local_port, app_local_prefix;
+    std::string cam_local_ip = s_local_address;
+    std::string cam_public_ip = s_pubic_address;
+    std::string cam_local_prefix;
+    bool app_same_public_ip_local_prefix = FALSE;
+
+    app_public = root["mapped_address"].asString();
+    index = app_public.find(':', 0);
+    app_public_ip = app_public.substr(0, index);
+    app_public_port = app_public.substr(index + 1, app_public.length() - index - 1);
+
+    app_local = root["local_address"].asString();
+    index = app_local.find(':', 0);
+    app_local_ip = app_local.substr(0, index);
+    app_local_port = app_local.substr(index + 1, app_local.length() - index - 1);
+
+    index = app_local_ip.rfind('.');
+    app_local_prefix = app_local_ip.substr(0, index);
+
+    index = cam_public_ip.rfind(':');
+    cam_public_ip = cam_public_ip.substr(0, index);
+
+    index = cam_local_ip.rfind('.');
+    cam_local_prefix = cam_local_ip.substr(0, index);
+
+    if ((app_public_ip.compare(cam_public_ip) == 0)
+            && (app_local_prefix.compare(cam_local_prefix) == 0)) {
+        app_same_public_ip_local_prefix = TRUE;
+    }
+
+	for (i = 0; i < MAX_P2P_CLIENT; i++) {
+		if (g_p2pClients[i].status == RTP_SENDING0) {
+			if (!app_same_public_ip_local_prefix && (app_public_ip.compare(g_p2pClients[i].ip) == 0) && (atoi(app_public_port.c_str()) == g_p2pClients[i].rtpport[0])) {
+				g_p2pClients[i].status = RTP_IDLE;
+				g_p2pNumClients--;
+				printf("========== %s: g_p2pNumClients - %d - stop send to %s:%d\n", __FUNCTION__, g_p2pNumClients, g_p2pClients[i].ip, g_p2pClients[i].rtpport[0]);
+			}
+			else if (app_same_public_ip_local_prefix && (app_local_ip.compare(g_p2pClients[i].ip) == 0) && (atoi(app_local_port.c_str()) == g_p2pClients[i].rtpport[0])) {
+                g_p2pClients[i].status = RTP_IDLE;
+                g_p2pNumClients--;
+                printf("========== %s: g_p2pNumClients - %d - stop send to %s:%d\n", __FUNCTION__, g_p2pNumClients, g_p2pClients[i].ip, g_p2pClients[i].rtpport[0]);
+			}
+		}
+	}
+	return 0;
+}
+
+int P2P_process_server_command(JsonCommand_p pJsoncommand) {
+	if (!pJsoncommand->IsJsonAvailable())
+		return -1;
+
+	std::string strCmdClass =  pJsoncommand->GetCmdClass();
+	std::string strCmd = pJsoncommand->GetCommand();
+	Json::Value root = pJsoncommand->GetJsonOjbect();
+
+	if (strCmdClass.compare("cam") && strCmdClass.compare("app")) {
+		printf("not command class cam");
+		return -1;
+	}
+	if (strCmd.compare("SEND_STREAM") == 0) {
+		return P2P_stream_to(root);
+	} else if (strCmd.compare("wait") == 0) {
+		return P2P_wait_request_stream_from(root);
+	} else if (strCmd.compare("STOP_STREAM") == 0) {
+		return P2P_stop_stream_to(root);
+	}
+	return 0;
+}
+
+int P2P_process_server_Json_command(string data) {
+	int ret = 0;
+	p_P2PSClient->addData(data);
+
+	while (p_P2PSClient->isCommandValid()) {
+		printf("find Json command: remain data :\'%s\'\n", p_P2PSClient->getRemainData().c_str());
+		JsonCommand_p pJsoncommand = p_P2PSClient->getJsonCommand();
+		if (pJsoncommand != NULL) {
+			printf("command class: \'%s\'\n", pJsoncommand->GetCmdClass().c_str());
+			printf("command: \'%s\'\n", pJsoncommand->GetCommand().c_str());
+			printf("Json value: \'%s\'\n", pJsoncommand->GetJsonValue().c_str());
+			ret = P2P_process_server_command(pJsoncommand);
+			delete pJsoncommand;
+			pJsoncommand = NULL;
+		}
+	}
+	return ret;
+}
+
+int P2P_send_cam_info() {
+    Json::Value root;
+    root["type"] = "camera";
+//    root["id"] = camid;
+
+    read_info("/etc/local_address", s_local_address, 50);
+    read_info("/etc/mapped_address", s_pubic_address, 50);
+    read_info("/etc/mapping_behavior", s_mapping_type, 200);
+    read_info("/etc/filtering_behavior", s_filtering_type, 200);
+
+    root["local_address"] = s_local_address;
+    root["mapped_address"] = s_pubic_address;
+    root["mapping_behavior"] = s_mapping_type;
+    root["filtering_behavior"] = s_filtering_type;
+
+    JsonCommand_p pJsonCommand = new JsonCommand();
+    pJsonCommand->SetCmdClass("app");
+    pJsonCommand->SetCommand("NAT_INFO");
+    pJsonCommand->SetJsonObject(root);
+    return p_P2PSClient->sendJsonCommand(pJsonCommand);
+}
+
+int P2P_register_camera() {
+    Json::Value root;
+    root["id"] = camid;
+//    root["name"] = "camera2";
+    root["name"] = camname;
+    root["username"] = "user1";
+//    root["password"] = "123456";
+    std::string pass("123456");
+    root["password"] = md5sum(pass.c_str(), pass.length());
+
+    JsonCommand_p pJsonCommand = new JsonCommand();
+    pJsonCommand->SetCmdClass("app");
+    pJsonCommand->SetCommand("REGISTER_CAMERA");
+    pJsonCommand->SetJsonObject(root);
+    return p_P2PSClient->sendJsonCommand(pJsonCommand);
+}
+
+void P2P_reconnect_server() {
+    if (p_P2PSClient != NULL) {
+        printf("********** reconnect server **********\n");
+        p_P2PSClient->Close();
+        sleep(10);
+    	if (!p_P2PSClient->Connect(FALSE)) {
+    		printf("connect P2P failed\n");
+    	}
+        P2P_register_camera();
+        sleep(1);
+        P2P_send_cam_info();
+    }
+}
+
+void * thread_read_P2P_server_data_func(void *p) {
+	int len, ret;
+	unsigned char *pBuffer = NULL;
+    P2P_register_camera();
+    sleep(1);
+    P2P_send_cam_info();
+
+	while (TRUE) {
+		len = p_P2PClientSocket->GetBuffer(&pBuffer);
+		if (len > 0) {
+			std::string data = (char*)pBuffer;
+			printf("read P2P server data: %s - %d\n", data.c_str(), len);
+			ret = P2P_process_server_Json_command(data);
+			p_P2PClientSocket->ResetBuffer();
+			t_TimeLaseMsg = time(NULL);
+			printf("---------- update t_TimeLaseMsg: t_TimeLaseMsg = %d\n", t_TimeLaseMsg);
+		}
+//		else {
+//			if (p_P2PClientSocket->m_boIsConnected)
+//				printf("read P2P server data: null\n");
+//			break;
+//			P2P_reconnect_server();
+//		}
+	}
+	pthread_exit(NULL);
+	return NULL;
+}
+
+void P2P_recreate_udp_socket() {
+    struct sockaddr_in si_me;
+    memset((char *) &si_me, 0, sizeof(si_me));
+    si_me.sin_family = AF_INET;
+    si_me.sin_port = htons(VIDEO_PORT_P2P);
+    si_me.sin_addr.s_addr = htonl(INADDR_ANY);
+
+    udpfd_video_p2p = socket(AF_INET, SOCK_DGRAM, 0);//UDP
+    printf("udp video p2p up\n");
+
+    bind(udpfd_video_p2p, (struct sockaddr*)&si_me, sizeof(si_me));
+    p2p_receive = true;
+}
+
+void P2P_close_udp_socket() {
+    p2p_receive = false;
+    close(udpfd_video_p2p);
+    udpfd_video_p2p = -1;
+}
+
+void P2P_update_NAT_info(bool full) {
+    char *ptr_array[6];
+    ptr_array[1] = (char*)malloc(30 * sizeof(char));
+    ptr_array[2] = (char*)malloc(30 * sizeof(char));
+    ptr_array[3] = (char*)malloc(30 * sizeof(char));
+    if (full) {
+        ptr_array[4] = (char*)malloc(30 * sizeof(char));
+        ptr_array[5] = (char*)malloc(30 * sizeof(char));
+    }
+    strcpy(ptr_array[1], "125.212.227.131");
+    strcpy(ptr_array[2], "--localport");
+    strcpy(ptr_array[3], "30000");
+    if (full) {
+        strcpy(ptr_array[4], "--mode");
+        strcpy(ptr_array[5], "full");
+    }
+
+    stunclient(full ? 6 : 4, ptr_array);
+
+    free(ptr_array[1]);
+    free(ptr_array[2]);
+    free(ptr_array[3]);
+    if (full) {
+        free(ptr_array[4]);
+        free(ptr_array[5]);
+    }
+}
+
+bool P2P_check_last_time_msg() {
+    time_t t_TimeCurrent = time(NULL);
+    if (t_TimeCurrent - t_TimeLaseMsg > 300) {
+        printf("========== time out server (t_TimeCurrent = %d, t_TimeLaseMsg = %d)=> reconnect\n", t_TimeCurrent, t_TimeLaseMsg);
+        t_TimeLaseMsg = t_TimeCurrent;
+        return FALSE;
+    }
+    return TRUE;
+}
+
+void * thread_update_NAT_info_func(void *p) {
+    while (TRUE) {
+        sleep(30);
+        if (!P2P_check_last_time_msg())
+            P2P_reconnect_server();
+        if (g_p2pNumClients == 0) {
+            P2P_close_udp_socket();
+            P2P_update_NAT_info(FALSE);
+            P2P_recreate_udp_socket();
+        }
+        P2P_send_cam_info();
+    }
+    pthread_exit(NULL);
+    return NULL;
+}
+
+int P2P_connect_server() {
+//	std::string p2p_server_ip = std::string(argv[3]);
+//	int p2p_server_port = atoi(argv[4]);
+
+	p_P2PClientSocket = new ClientSock(p2p_server_ip.c_str(), p2p_server_port);
+	p_P2PSClient = new SClient(p_P2PClientSocket);
+
+	if (!p_P2PSClient->Connect(FALSE)) {
+		printf("connect P2P failed\n");
+//		return -1;
+	}
+
+    pthread_create(&thread_read_P2P_server_data, 0, thread_read_P2P_server_data_func, NULL);
+    pthread_create(&thread_update_NAT_info, 0, thread_update_NAT_info_func, NULL);
+	return 0;
+}
+
+void P2P_parse_clients(int argc, char *argv[]) {
+	int i;
+
+	if (argc < 3)
+		return;
+
+	t_TimeLaseMsg = time(NULL);
+	//get NAT info from stun server
+	P2P_update_NAT_info(TRUE);
+
+    P2P_recreate_udp_socket();
+
+    //Read incoming udp package for test
+//    pthread_create(&pthread_all, NULL, &threadRecvMsg_all, NULL);
+//    pthread_detach(pthread_all);
+    //End
+
+	g_p2pNumClients = atoi(argv[2]);
+	//default send p2p stream to no enpoint
+	for (i = 0; i < MAX_P2P_CLIENT;i++) {
+		g_p2pClients[i].status = RTP_IDLE;
+	}
+	//connnect p2p server
+	if (g_p2pNumClients == 0) {
+	    p2p_server_ip = std::string(argv[3]);
+	    p2p_server_port = atoi(argv[4]);
+		P2P_connect_server();
+		return;
+	}
+
+	if (g_p2pNumClients > MAX_P2P_CLIENT) g_p2pNumClients = MAX_P2P_CLIENT;
+	for (i = 0; i < g_p2pNumClients; i++) {
+		strcpy(g_p2pClients[i].ip, argv[3 + i * 2]);
+		g_p2pClients[i].rtpport[0] = atoi(argv[4 + i * 2]);
+		g_p2pClients[i].seqnum[0] = 0;
+		g_p2pClients[i].status = RTP_SENDING0;
+		printf("========== g_p2pNumClients - %d\n", i);
+		printf("ip - %s\n", g_p2pClients[i].ip);
+		printf("rtpport - %d\n", g_p2pClients[i].rtpport[0]);
+	}
+}
+#endif //USE_TEST_P2P
+
 /******************************************************************************
 * function    : main()
 * Description : main program
@@ -4889,9 +5438,13 @@ int main(int argc, char *argv[])
 
 #ifdef CHECK_ENCRYPT_CAMID
     s32Ret = check_encrypt_camid();
-    if (s32Ret)
-    	return -1;
+//    if (s32Ret)
+//    	return -1;
 #endif //CHECK_ENCRYPT_CAMID
+
+#ifdef USE_TEST_P2P
+    P2P_parse_clients(argc, argv);
+#endif //USE_TEST_P2P
 
     switch (*argv[1])
     {
@@ -4931,11 +5484,18 @@ int main(int argc, char *argv[])
         	break;
         case 'V':
 #ifdef USE_VIETTEL_IDC
-        	s32Ret = VTIDC_start_rtmp_stream();
-            printf("please press twice ENTER to exit this sample\n");
-            getchar();
-            getchar();
-            VTIDC_stop_rtmp_stream();
+        	send_RTMP_to_server = HI_TRUE;
+        	VTIDC_rtmp_url = "rtmp://125.212.200.243/cloud-camera/testSbd";
+//        	VTIDC_rtmp_url = "rtmp://khiembt:khiembt@43.239.148.86:1935/live/cam-lumi.stream";
+//        	VTIDC_rtmp_url = "rtmp://lumi:lumi@192.168.1.30:1935/live/cam-lumi.stream";
+//        	VTIDC_rtmp_url = "rtmp://rad.haipv.com:1935/live/cam-lumi.stream";
+        	has_server_key = HI_TRUE;
+        	s32Ret = STREAM_720p();
+//        	s32Ret = VTIDC_start_rtmp_stream();
+//            printf("please press twice ENTER to exit this sample\n");
+//            getchar();
+//            getchar();
+//            VTIDC_stop_rtmp_stream();
 #endif //USE_VIETTEL_IDC
         	break;
         default:

@@ -103,7 +103,7 @@ public:
 	enum State getState();
 	void setState(enum State state);
 
-	bool Connect();
+	bool Connect(bool sendKeepAlive);
 	bool Close();
 
 	bool SendAuthenComand(std::string type, std::string camid);

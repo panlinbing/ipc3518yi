@@ -333,9 +333,9 @@ ClientSock::GetBuffer(u8_p *pBuffer) {
         //DEBUG2("len: %d", iLength);
 //        memset(m_pByBuffer, '\0', BUFFER_SOCKET_SIZE);
         //handle close socket
-        if (iLength == 0) {
-        	Close();
-        }
+//        if (iLength == 0) {
+//        	Close();
+//        }
     }
     return iLength;
 }
