@@ -8,7 +8,7 @@
 #ifndef CONFIG_H_
 #define CONFIG_H_
 
-//#define RELEASE_NOT_STOP			1
+#define RELEASE_NOT_STOP			1
 #define CHECK_ISP_REGISTER			1
 #define CHECK_ENCRYPT_CAMID			1
 
@@ -20,9 +20,11 @@
 //#define USE_AUDIO_SERVER			1
 //#define USE_AUTHEN_REQUEST_STREAM	1
 
-#define USE_CONNECT_HC				1
+//#define USE_CONNECT_HC				1
 //#define USE_VIETTEL_IDC				1
 
-//#define USE_CAM_20_FPS				1
+#define USE_FTEL					1
+
+#define USE_CAM_20_FPS				1
 
 #endif /* CONFIG_H_ */

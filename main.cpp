@@ -11,20 +11,6 @@
 //#endif
 //#endif /* End of #ifdef __cplusplus */
 
-#include "main.h"
-#include "region.h"
-#include "iq.h"
-#include "rtmp/rtmp.h"
-#include "json.h"
-#include "vda.h"
-#include "ClientSock.hpp"
-#include "Sclient.hpp"
-//#ifdef USE_VIETTEL_IDC
-#include "aes.h"
-#include "curl/curl.h"
-#include <iomanip>
-//#endif //USE_VIETTEL_IDC
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -50,6 +36,20 @@
 #include "sample_comm.h"
 #include "zbar.h"
 #include "opencv/highgui.h"
+
+#include "main.h"
+#include "region.h"
+#include "iq.h"
+#include "rtmp/rtmp.h"
+#include "json.h"
+#include "vda.h"
+#include "ClientSock.hpp"
+#include "Sclient.hpp"
+//#ifdef USE_VIETTEL_IDC
+#include "aes.h"
+#include "curl/curl.h"
+#include <iomanip>
+//#endif //USE_VIETTEL_IDC
 
 using namespace std;
 using namespace zbar;
@@ -142,6 +142,10 @@ static pthread_t thread_read_HC_data;
 
 //VTIDC
 static std::string VTIDC_rtmp_url;
+
+//FTEL
+static std::string FTEL_rtmp_url;
+static pthread_t FTEL_thread_check_camera_status;
 
 //cam info
 static char user[MAX_USER_PASS_LEN];
@@ -2309,7 +2313,7 @@ HI_S32 VENC_Sent(char *buffer, int buflen, int channel)
 	}
 
 //send to server_test
-	if ((send_RTMP_to_server) && (channel == 0) && (reInitRTMP == HI_FALSE)) {
+	if ((send_RTMP_to_server) && (channel == 1) && (reInitRTMP == HI_FALSE)) {
 		//send frame to rtmp server
 		u_int32_t dts, pts;
 
@@ -2345,7 +2349,7 @@ HI_S32 SAMPLE_COMM_VENC_Sentjin(VENC_STREAM_S *pstStream, int channel)
 		}
     }
 
-    if ((send_RTMP_to_server) && (channel == 0)) flag = 1;
+    if ((send_RTMP_to_server) && (channel == 1)) flag = 1;
 
     if(flag)
     {
@@ -2695,7 +2699,7 @@ HI_S32 AENC_Sent(AUDIO_STREAM_S stream) {
 		}
 	}
 
-//send to server_test
+/*/send to server_test
 	if (send_RTMP_to_server && (reInitRTMP == HI_FALSE)) {
 		//send frame to rtmp server
 		u_int32_t pts;
@@ -2712,6 +2716,7 @@ HI_S32 AENC_Sent(AUDIO_STREAM_S stream) {
 			rtmp_destroy_client();
 		}
 	}
+//*/
 
 	return HI_SUCCESS;
 }
@@ -2886,6 +2891,9 @@ void *thread_init_RTMP(void *parg) {
 	while (HI_TRUE) {
 		if ((reInitRTMP == HI_TRUE) && has_server_key) {
 #ifdef USE_VIETTEL_IDC
+			std::string rtmp_url = *(std::string*)parg;
+			s32Ret = rtmp_init_client_rtmp_url(rtmp_url);
+#elif USE_FTEL
 			std::string rtmp_url = *(std::string*)parg;
 			s32Ret = rtmp_init_client_rtmp_url(rtmp_url);
 #else
@@ -4087,7 +4095,11 @@ void InitRtspServer()
 #ifdef USE_RTMP_INIT_THREAD
 	//init rtmp client
 	if (send_RTMP_to_server) {
+#ifdef USE_VIETTEL_IDC
 		pthread_create(&threadInitRTMP, 0, thread_init_RTMP, &VTIDC_rtmp_url);
+#else
+		pthread_create(&threadInitRTMP, 0, thread_init_RTMP, &FTEL_rtmp_url);
+#endif
 	}
 #endif //USE_RTMP_INIT_THREAD
 
@@ -4099,8 +4111,16 @@ void InitRtspServer()
 	s32Ret = VTIDC_start_rtmp_stream();
 #endif //USE_VIETTEL_IDC
 
+#ifdef USE_FTEL
+	s32Ret = FTEL_start_rtmp_stream();
+#endif //USE_FTEL
+
 	//init VENC and AENC to get video and audio stream
 	s32Ret = create_stream();
+
+#ifdef USE_FTEL
+	s32Ret = FTEL_stop_rtmp_stream();
+#endif //USE_FTEL
 
 #ifdef USE_VIETTEL_IDC
 	VTIDC_stop_rtmp_stream();
@@ -4815,6 +4835,202 @@ int VTIDC_stop_rtmp_stream() {
 
 #endif //USE_VIETTEL_IDC
 
+/******************************************************************************
+* group: FTEL - HTTP POST - RTMP
+******************************************************************************/
+#ifdef USE_FTEL
+#define FTEL_AUTHEN_SERVER		"http://43.239.148.89:8089/api/getcamerartmp"
+#define CUSTOMER_GUID			"DC8F4193-3CA9-4E29-AEB2-CA37CAA92281"
+#define DO_PUBLISH				"doPublish"
+#define DO_PUBLISH_KEY			"12345"
+
+//TRUE - rtmp; FALSE - rtsp
+std::string FTEL_create_message(bool rtmp) {
+	Json::FastWriter fastWriter;
+	Json::Value root;
+	std::string input_str;
+	root["IdCameraRTMP"] = camid;
+	root["CustomerGuid"] = CUSTOMER_GUID;
+
+	input_str = fastWriter.write(root);
+	return fastWriter.write(root);
+}
+
+static size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *userp)
+{
+    ((std::string*)userp)->append((char*)contents, size * nmemb);
+    return size * nmemb;
+}
+
+std::string FTEL_send_http_post(const char* server_url, std::string send_str) {
+	CURL *curl;
+	CURLcode res;
+	std::string readString;
+
+	/* In windows, this will init the winsock stuff */
+	curl_global_init(CURL_GLOBAL_ALL);
+
+	/* get a curl handle */
+	curl = curl_easy_init();
+	if(curl) {
+		/* send all data to this function  */
+	    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+	    /* we pass our readString to the callback function */
+	    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readString);
+
+		/* First set the URL that is about to receive our POST. This URL can
+		 just as well be a https:// URL if that is what should receive the
+		 data. */
+		curl_easy_setopt(curl, CURLOPT_URL, server_url);
+
+		//char v_ct[64] = "Content-Type: application/json";
+		struct curl_slist *curlHeader = NULL;
+		curlHeader = curl_slist_append(curlHeader, "Content-Type: application/json");
+		curl_easy_setopt(curl, CURLOPT_HTTPHEADER, curlHeader);
+
+		/* Now specify the POST data */
+		curl_easy_setopt(curl, CURLOPT_POSTFIELDS, send_str.c_str());
+
+		/* Perform the request, res will get the return code */
+		res = curl_easy_perform(curl);
+		/* Check for errors */
+		if(res != CURLE_OK)
+			fprintf(stderr, "curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
+
+		/* always cleanup */
+		curl_easy_cleanup(curl);
+
+		/* free the custom headers */
+		curl_slist_free_all(curlHeader);
+	}
+	curl_global_cleanup();
+	return readString;
+}
+
+char easytolower(char in){
+  if(in<='Z' && in>='A')
+    return in-('Z'-'z');
+  return in;
+}
+
+int FTEL_parse_recv_message(std::string recv_str) {
+	Json::Reader reader;
+	Json::Value root;
+	std::string rtmp_url;
+	int ret = -1;
+
+	if (reader.parse(recv_str, root)) {
+		int code = root["Code"].asInt();
+		std::string message = root["Message"].asString();
+
+		if (code == 1) {
+			Json::Value root_link = root["Data"];
+
+			std::string rtmp_id_camera = root_link["IdCamera"].asString();
+			std::string rtmp_server_ip = root_link["IP_Wowza_Server"].asString();
+			std::string rtmp_server_port = root_link["PortRTMP"].asString();
+			std::string rtmp_is_streaming = root_link["IsStreaming"].asString();
+			std::string rtmp_is_recorded = root_link["IsRecorded"].asString();
+			std::string rtmp_cam_id = std::string(camid);
+			std::transform(rtmp_cam_id.begin(), rtmp_cam_id.end(), rtmp_cam_id.begin(), easytolower);
+
+			FTEL_rtmp_url = "rtmp://" + rtmp_server_ip + ":" + rtmp_server_port + "/live?doPublish=12345/" + rtmp_cam_id + ".stream";
+//			FTEL_rtmp_url = "rtmp://" + std::string("192.168.1.30") + ":" + rtmp_server_port + "/live?doPublish=12345/" + rtmp_cam_id + ".stream";
+			ret = 0;
+		}
+	}
+	return ret;
+}
+
+int FTEL_get_rtmp_link() {
+	//create message to send http post - rtmp
+	std::string send_str = FTEL_create_message(TRUE);
+//	std::string send_str = FTEL_create_message(FALSE);
+	printf("send_str: %d - %s\n", send_str.length(), send_str.c_str());
+
+	//send http post message - push server
+	std::string recv_str = FTEL_send_http_post(FTEL_AUTHEN_SERVER, send_str);
+	printf("recv_str: %d - %s\n", recv_str.length(), recv_str.c_str());
+
+	//parse recv message
+	int ret = FTEL_parse_recv_message(recv_str);
+	printf("FTEL_rtmp_url: %d - %s\n", FTEL_rtmp_url.length(), FTEL_rtmp_url.c_str());
+
+	return ret;
+}
+
+void *FTEL_thread_check_camera_status_func(void *p) {
+	int ret;
+
+	while (1) {
+		ret = FTEL_get_rtmp_link();
+
+		//send rtmp stream to rtmp url
+		if ((ret == 0) && (reInitRTMP == HI_TRUE) && (FTEL_rtmp_url != "")) {
+			printf("-----===== %s: start send stream to FTEl server\n", __FUNCTION__);
+			ret = rtmp_init_client_rtmp_url(FTEL_rtmp_url);
+			if (ret != 0) {
+				//RTMP init failed - RTMP not sending
+				reInitRTMP = HI_TRUE;
+			}
+			else {
+				//RTMP is sending
+				reInitRTMP = HI_FALSE;
+			}
+			has_server_key = 1;
+		}
+		else if (ret != 0) {
+			//stop send stream
+			FTEL_stop_rtmp_stream();
+		}
+		sleep(10);
+	}
+
+	return NULL;
+}
+
+int FTEL_start_rtmp_stream() {
+//	int retry_count = 3;
+	int ret = -1;
+
+	pthread_create(&FTEL_thread_check_camera_status, 0, FTEL_thread_check_camera_status_func, NULL);
+
+//	while ((retry_count > 0) && (ret != 0)) {
+//		//http post - authen server to get rtmp url
+//		ret = FTEL_get_rtmp_link();
+//
+//		//send rtmp stream to rtmp url
+//		if ((ret == 0) && (reInitRTMP == HI_TRUE) && (FTEL_rtmp_url != "")) {
+//			ret = rtmp_init_client_rtmp_url(FTEL_rtmp_url);
+//			if (ret != 0) {
+//				//RTMP init failed - RTMP not sending
+//				reInitRTMP = HI_TRUE;
+//			}
+//			else {
+//				//RTMP is sending
+//				reInitRTMP = HI_FALSE;
+//			}
+//		}
+//		sleep(5);
+//	}
+//
+//	if (FTEL_rtmp_url != "") {
+//		has_server_key = 1;
+//	}
+
+	return ret;
+}
+
+int FTEL_stop_rtmp_stream() {
+	printf("-----===== %s:\n", __FUNCTION__);
+	has_server_key = 0;
+	reInitRTMP = HI_TRUE;
+	sleep(1);
+	rtmp_destroy_client();
+	return 0;
+}
+#endif //USE_FTEL
+
 
 #ifdef CHECK_ENCRYPT_CAMID
 #define KEY_FILE	"/etc/key"
@@ -4936,6 +5152,15 @@ int main(int argc, char *argv[])
             getchar();
             getchar();
             VTIDC_stop_rtmp_stream();
+#endif //USE_VIETTEL_IDC
+        	break;
+        case 'F':
+#ifdef USE_FTEL
+        	s32Ret = FTEL_start_rtmp_stream();
+            printf("please press twice ENTER to exit this sample\n");
+            getchar();
+            getchar();
+            FTEL_stop_rtmp_stream();
 #endif //USE_VIETTEL_IDC
         	break;
         default:

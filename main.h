@@ -145,4 +145,9 @@ int VTIDC_start_rtmp_stream();
 int VTIDC_stop_rtmp_stream();
 #endif //USE_VIETTEL_IDC
 
+#ifdef USE_FTEL
+int FTEL_start_rtmp_stream();
+int FTEL_stop_rtmp_stream();
+#endif //USE_VIETTEL_IDC
+
 #endif
